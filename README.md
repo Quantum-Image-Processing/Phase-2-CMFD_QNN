@@ -1,0 +1,1 @@
+## QNN (Quantum Neural Network) Implementation for Project Phase-1, Sem-6
