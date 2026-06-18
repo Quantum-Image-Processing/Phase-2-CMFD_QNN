@@ -1,0 +1,26 @@
+# Shared config. Keys under EXTRACT_KEYS (see cache_contract.py) define the cache
+# identity; changing K_sweep/L_sweep/train_* does NOT invalidate the cache.
+seed: 1337
+n_seeds: 5
+
+# --- extract-relevant (cache identity) ---
+extractor: resnet18          # frozen, ImageNet-pretrained, fc removed -> 512-D
+image_size: 224
+k_max: 8                     # PCA fitted once with this many components (nested)
+test_frac: 0.2
+datasets:
+  - name: micc_f2000
+    root: data/MICC-F2000
+
+# --- experiment sweep (does not affect cache) ---
+K_sweep: [4, 6, 8]
+L_sweep: [1, 2, 4, 6]
+tier: 1                      # 1 = strict match (fixed shared PCA). Tier 2 not in skeleton.
+
+# --- torch head training ---
+train_epochs: 80
+train_lr: 0.05
+device: default.qubit        # PennyLane simulator; switch to lightning.qubit for speed
+
+cache_dir: cache
+results_dir: results
