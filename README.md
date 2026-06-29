@@ -65,3 +65,4 @@ warning motivating Tier 1), D2PRL / QDL-CMFD / Cozzolino Dense-Field (pixel-leve
 ceiling, deferred). Note: D2PRL leads the best prior *deep* model by ~16 percentage
 points pixel-level F1 on CASIA (0.806 vs 0.643), with a keypoint method (SSG, 0.796)
 nearly level — it does not beat all prior work.
+    

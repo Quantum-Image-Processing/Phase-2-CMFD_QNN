@@ -66,6 +66,11 @@ def make_svm():
     return GridSearchCV(SVC(kernel="rbf"), grid, cv=3, n_jobs=-1)
 
 
+def make_svm_linear():
+    grid = {"C": [0.01, 0.1, 1, 10, 100]}
+    return GridSearchCV(SVC(kernel="linear"), grid, cv=3, n_jobs=-1)
+
+
 def fit_torch_head(head, Xtr, ytr, Xte, epochs, lr, seed):
     """Full-batch training with a fixed validation split and early stopping.
     Returns (test_probabilities, train_loss_curve, val_loss_curve).

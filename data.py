@@ -30,18 +30,44 @@ def adapter_labelled_folders(root):
 
 
 def adapter_comofod(root):
-    """CoMoFoD: filenames like 001_F.png (forged) / 001_O.png (original) plus many
-    attack variants 001_F_BC1.png etc. source_id = the leading base number ('001')
-    so every variant of one base image stays on the same side of the split.
-    TODO: confirm the exact suffix convention of your CoMoFoD copy."""
+    """CoMoFoD flat folder. Naming: NNN_X[_VARIANT].ext
+    X=F -> forged (label 1), X=O -> original (label 0).
+    X=B (binary mask) and X=M (mask) are skipped — not classifiable images.
+    source_id = leading digits so all attack variants of one base stay together.
+    """
     items = []
     for p in sorted(glob.glob(os.path.join(root, "*"))):
         if not _is_img(p):
             continue
         name = os.path.basename(p)
-        base = name.split("_")[0]                 # '001'
-        label = 0 if "_O" in name else 1          # TODO: verify O/F convention
-        items.append((name, p, label, base))
+        stem = os.path.splitext(name)[0]
+        m = re.match(r'^(\d+)_(F|O)', stem)
+        if not m:
+            continue                               # skip _B, _M files
+        source_id = m.group(1)
+        label = 1 if m.group(2) == "F" else 0
+        items.append((name, p, label, source_id))
+    return items
+
+
+def adapter_comofod_clean(root):
+    """CoMoFoD clean pairs only: stems matching exactly NNN_O or NNN_F (no attack
+    suffix). These are the unattacked base images — the apples-to-apples comparison
+    against MICC. Attack variants (_BC, _CA, _CR, _IB, _JC, _NA) are excluded and
+    reserved for a separate robustness experiment.
+    """
+    items = []
+    for p in sorted(glob.glob(os.path.join(root, "*"))):
+        if not _is_img(p):
+            continue
+        name = os.path.basename(p)
+        stem = os.path.splitext(name)[0]
+        m = re.match(r'^(\d+)_(F|O)$', stem)       # $ anchors: no attack suffix
+        if not m:
+            continue
+        source_id = m.group(1)
+        label = 1 if m.group(2) == "F" else 0
+        items.append((name, p, label, source_id))
     return items
 
 
@@ -70,6 +96,7 @@ ADAPTERS = {
     "micc_f600": adapter_labelled_folders,    # TODO: replace with real MICC parser
     "micc_f2000": adapter_micc_f2000,
     "comofod": adapter_comofod,
+    "comofod_clean": adapter_comofod_clean,   # unattacked base pairs only
     "casia_cmfd": adapter_labelled_folders,   # TODO: copy-move subset only
 }
 
