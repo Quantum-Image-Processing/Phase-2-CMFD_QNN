@@ -1,10 +1,6 @@
 cache*/
 data/
-models/
-results/
 pilot_decoder_out/
 __pycache__/
 *.pyc
 *.npy
-*.pth
-*.hd5
