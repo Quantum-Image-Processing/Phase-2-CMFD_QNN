@@ -1,5 +1,6 @@
 cache*/
-data/
+data/*
+!data/generate_synthetic.py
 pilot_decoder_out/
 __pycache__/
 *.pyc

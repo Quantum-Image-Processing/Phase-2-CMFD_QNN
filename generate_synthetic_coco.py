@@ -1,16 +1,18 @@
 """Generate synthetic copy-move forgery images from COCO val2017.
 
-Following D2PRL Section V-B:
+Pipeline:
+  0. Resize each COCO image to 1024x1024 FIRST, before any copy-move ops
   - Source region: 80% random polygon (5-8 vertices, 10-30% area),
                    20% COCO instance mask (non-crowd, area > 2000px)
   - Affine: rotation in [-180, 180], scale in [0.5, 2.0]
   - Target: source and target centroids must map to different cells in 16×16 grid
-  - Post-process: JPEG quality in [85, 95] + Gaussian noise std in [1, 3]
+  - Post-process: JPEG quality in [70, 95] + light Gaussian noise std in [1, 3]
   - Binary mask: source AND target regions marked 255
+  - Forged image + mask are then downsized from 1024x1024 to 256x256 for saving
 
 Output:
-  data/synthetic_coco/images/<id>.jpg
-  data/synthetic_coco/masks/<id>.png
+  data/synthetic_coco/images/<id>.jpg   (256x256)
+  data/synthetic_coco/masks/<id>.png    (256x256)
 
 Usage:
   python generate_synthetic_coco.py --pilot       # 5 samples, show grids
@@ -31,13 +33,15 @@ SEED          = 42
 TEST_FRAC     = 0.20
 
 # D2PRL Section V-B parameters
+WORK_DIM      = 1024   # working resolution: all forgery ops happen here
+FINAL_DIM     = 256    # final saved resolution (downsized after forging)
 POLY_FRAC     = 0.80   # fraction using polygon source
 N_VERTS_RANGE = (5, 8)
 AREA_FRAC_MIN = 0.10
 AREA_FRAC_MAX = 0.30
 ROT_RANGE     = (-180, 180)
 SCALE_RANGE   = (0.5, 2.0)
-JPEG_Q_RANGE  = (85, 95)
+JPEG_Q_RANGE  = (70, 95)
 NOISE_STD_RANGE = (1, 3)
 MAX_PLACE_TRIES = 700   # combined budget (no fallback needed with grid-cell check)
 
@@ -136,9 +140,12 @@ def post_process(img_pil, noise_std, jpeg_q):
 
 
 # ------------------------------------------------------------------ main generator
-def generate_one(img_path, img_w, img_h, annotations, rng, variant_idx):
+def generate_one(img_path, orig_w, orig_h, annotations, rng, variant_idx):
     """Generate one synthetic copy-move image. Returns (forged_img, binary_mask) or None."""
     img = Image.open(img_path).convert('RGB')
+    img = img.resize((WORK_DIM, WORK_DIM), Image.BILINEAR)
+    img_w = img_h = WORK_DIM
+    sx, sy = WORK_DIM / orig_w, WORK_DIM / orig_h
 
     # --- Source region mask
     use_instance = (len(annotations) > 0) and (rng.random() > POLY_FRAC)
@@ -152,7 +159,14 @@ def generate_one(img_path, img_w, img_h, annotations, rng, variant_idx):
         area_frac = rng.uniform(AREA_FRAC_MIN, AREA_FRAC_MAX)
         src_mask  = polygon_mask(img_w, img_h, n_verts, area_frac, np.random.RandomState(rng.randint(0, 2**31)))
     else:
-        src_mask = coco_seg_to_mask(seg, img_w, img_h)
+        seg_scaled = []
+        for poly in seg:
+            p = list(poly)
+            for i in range(0, len(p) - 1, 2):
+                p[i]     *= sx
+                p[i + 1] *= sy
+            seg_scaled.append(p)
+        src_mask = coco_seg_to_mask(seg_scaled, img_w, img_h)
 
     bbox = mask_bbox(src_mask)
     if bbox is None or bbox[2] < 8 or bbox[3] < 8:
@@ -228,7 +242,13 @@ def generate_one(img_path, img_w, img_h, annotations, rng, variant_idx):
         source_type='instance' if use_instance else 'polygon',
         forged_patches=int((np.array(Image.fromarray(bin_mask).resize((16, 16), Image.NEAREST)) > 0).sum()),
     )
-    return forged_img, bin_mask, meta
+
+    # --- Downsize forged image + mask from WORK_DIM to FINAL_DIM for saving
+    forged_img_final = forged_img.resize((FINAL_DIM, FINAL_DIM), Image.BILINEAR)
+    bin_mask_final = np.array(
+        Image.fromarray(bin_mask).resize((FINAL_DIM, FINAL_DIM), Image.NEAREST), dtype=np.uint8)
+
+    return forged_img_final, bin_mask_final, meta
 
 
 # ------------------------------------------------------------------ 16×16 grid
@@ -278,8 +298,15 @@ def run_pilot(img_info, ann_by_img, rng):
         forged_img, bin_mask, meta = result
         generated += 1
 
+        # centroids/grid cells in meta are in WORK_DIM space; bin_mask is FINAL_DIM
+        rescale = FINAL_DIM / WORK_DIM
+        src_cx_f = meta['source_centroid'][0] * rescale
+        src_cy_f = meta['source_centroid'][1] * rescale
+        tgt_cx_f = meta['target_centroid'][0] * rescale
+        tgt_cy_f = meta['target_centroid'][1] * rescale
+
         separated = (meta['src_grid_cell'] != meta['tgt_grid_cell'])
-        print(f"\n  Sample {generated}: {fname}  ({iw}x{ih})")
+        print(f"\n  Sample {generated}: {fname}  ({iw}x{ih} -> {WORK_DIM}x{WORK_DIM} -> {FINAL_DIM}x{FINAL_DIM})")
         print(f"    source_type  : {meta['source_type']}")
         print(f"    angle={meta['angle']:+.1f}  scale={meta['scale']:.2f}")
         print(f"    source centroid: {meta['source_centroid']}  grid cell: {meta['src_grid_cell']}")
@@ -288,11 +315,15 @@ def run_pilot(img_info, ann_by_img, rng):
         print(f"    forged patches (16x16): {meta['forged_patches']}/256")
         print(f"    post-process: jpeg_q={meta['jpeg_q']}  noise_std={meta['noise_std']}")
 
-        print_grid(bin_mask, ih, iw,
-                   meta['source_centroid'][0], meta['source_centroid'][1],
-                   meta['target_centroid'][0], meta['target_centroid'][1])
+        print_grid(bin_mask, FINAL_DIM, FINAL_DIM, src_cx_f, src_cy_f, tgt_cx_f, tgt_cy_f)
+
+        pilot_dir = 'data/synthetic_coco/pilot'
+        os.makedirs(pilot_dir, exist_ok=True)
+        forged_img.save(os.path.join(pilot_dir, f'{img_id:012d}.jpg'), quality=95)
+        Image.fromarray(bin_mask).save(os.path.join(pilot_dir, f'{img_id:012d}_mask.png'))
 
     print(f"\nPilot done. {generated}/5 samples generated successfully.", flush=True)
+    print("Saved pilot images/masks to data/synthetic_coco/pilot/ for visual inspection.")
     if generated == 5:
         print("=> All checks passed. Run with --n 15000 for full generation.")
     else:

@@ -163,11 +163,11 @@ def main():
         manifest = json.load(f)
     samples = manifest['samples']
 
-    # Pick 3 REPRESENTATIVE samples: forged_patches between 40 and 120 (20-47% of 256)
-    # Not the 97-99% outliers — those skew Dice expectations
+    # Pick 3 REPRESENTATIVE samples: mask coverage between 15% and 47% of the image
+    # Not the near-zero or near-total outliers — those skew Dice expectations
     representative = [s for s in samples
-                      if 40 <= s['forged_patches'] <= 120 and s['split'] == 'train'][:3]
-    print(f"Pilot samples: {[(s['id'], s['forged_patches']) for s in representative]}", flush=True)
+                      if 0.15 <= s['coverage'] <= 0.47 and s['split'] == 'train'][:3]
+    print(f"Pilot samples: {[(s['id'], round(s['coverage'], 3)) for s in representative]}", flush=True)
 
     train100 = [s for s in samples if s['split'] == 'train'][:100]
 
