@@ -31,7 +31,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
-FEATURES_PATH = 'features/micc_features.npz'
+FEATURES_PATH = 'features/micc_features_resnet.npz'   # or 'features/micc_features_alkhuzaie.npz'
 POOLING   = 'mean'    # 'mean' or 'max' -- run both, don't assume a winner
 N_FOLDS   = 10
 SEED      = 42
@@ -68,10 +68,12 @@ def _circuit(inputs, weights):
 
 
 class DressedQuantumNet(nn.Module):
-    """Linear(32->8) -> VQC -> Linear(8->2). Dressed circuit per Mari et al."""
-    def __init__(self):
+    """Linear(input_dim->8) -> VQC -> Linear(8->2). Dressed circuit per Mari et al.
+    input_dim is NOT hardcoded -- works whether features are 32-dim (ResNet)
+    or 400-dim (Al-khuzaie native), read from the actual data at runtime."""
+    def __init__(self, input_dim):
         super().__init__()
-        self.pre  = nn.Linear(32, N_QUBITS)          # trainable reduction, not PCA
+        self.pre  = nn.Linear(input_dim, N_QUBITS)     # trainable reduction, not PCA
         self.q_weights = nn.Parameter(0.01 * torch.randn(Q_DEPTH, N_QUBITS))
         self.post = nn.Linear(N_QUBITS, 2)             # class logits
 
@@ -86,7 +88,7 @@ class DressedQuantumNet(nn.Module):
 
 
 def train_vqc(X_train, y_train, X_test, y_test, device):
-    model = DressedQuantumNet().to(device)
+    model = DressedQuantumNet(input_dim=X_train.shape[1]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=VQC_LR)
     loss_fn = nn.CrossEntropyLoss()
 
