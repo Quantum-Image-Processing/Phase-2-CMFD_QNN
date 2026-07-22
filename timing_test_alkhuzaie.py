@@ -15,7 +15,7 @@ model, real backward pass) and extrapolates to full epoch / full run time.
 """
 import time
 import torch
-from train_extractor_alkhuzaie_native import (
+from Train_extractor_alkhuzaie_native import (
     PatchModel, FullPatchIterableDataset, BATCH, WORKERS,
     LR, MAX_EPOCHS, IMG_DIR, MASK_DIR, MANIFEST
 )
