@@ -71,13 +71,19 @@ STD  = [0.229, 0.224, 0.225]
 
 
 # ------------------------------------------------------------------ Al-khuzaie's CNN, faithful
-def _conv_relu_lrn(in_c, out_c, k, stride=1, pad=None):
+# except: BatchNorm2d substituted for the paper's LocalResponseNorm (see
+# AlKhuzaieExtractor docstring for why this is a disclosed deviation, not
+# an oversight -- nn.LocalResponseNorm's CPU implementation made a 75K-param
+# model 2.8x SLOWER per batch than 11M-param ResNet18, confirmed via
+# timing_test_alkhuzaie.py, not assumed).
+def _conv_relu_bn(in_c, out_c, k, stride=1, pad=None):
     if pad is None:
         pad = k // 2
     return nn.Sequential(
         nn.Conv2d(in_c, out_c, k, stride=stride, padding=pad),
         nn.ReLU(inplace=True),
-        nn.LocalResponseNorm(size=5),   # "each feature map is normalized locally before pooling"
+        nn.BatchNorm2d(out_c),   # paper specifies LocalResponseNorm here; substituted
+                                  # for CPU computational feasibility -- see class docstring
     )
 
 
@@ -95,27 +101,41 @@ class AlKhuzaieExtractor(nn.Module):
     fully specified in the paper text available -- this is a reasonable
     reconstruction, not a verbatim transcription. Flag this in your
     writeup if precision here matters for your methodology section.
+
+    DISCLOSED (2nd deviation): the paper specifies LocalResponseNorm after
+    each conv layer ("each feature map is normalized locally before
+    pooling") for better generalization. BatchNorm2d is substituted here
+    for the same normalization/generalization role, for CPU computational
+    feasibility -- nn.LocalResponseNorm's CPU implementation is unoptimized
+    and made this 75K-param model 2.8x slower per batch than an 11M-param
+    ResNet18 (confirmed via timing_test_alkhuzaie.py). BatchNorm superseded
+    LRN in mainstream CNN design after the AlexNet era for largely this
+    same practicality/training-stability reason, so this is a reasonable
+    substitution -- but state it explicitly in the methodology section as
+    "BatchNorm2d substituted for LocalResponseNorm for CPU computational
+    feasibility; paper specifies LRN." Do not present this network as an
+    exact replication.
     """
     def __init__(self):
         super().__init__()
         # Layers 1-2: 5x5 kernel, 30 kernels each (paper-specified)
-        self.conv1 = _conv_relu_lrn(3,  30, 5, stride=1)
-        self.conv2 = _conv_relu_lrn(30, 30, 5, stride=1)
+        self.conv1 = _conv_relu_bn(3,  30, 5, stride=1)
+        self.conv2 = _conv_relu_bn(30, 30, 5, stride=1)
         self.pool1 = nn.MaxPool2d(2, stride=2)             # "2x2 filter" pooling after layers 1-2
                                                              # 128 -> 64
 
         # Layers 3-9 (7 conv layers, stride 1, paper-specified count/stride;
         # channel progression is the disclosed reconstruction noted above)
-        self.conv3 = _conv_relu_lrn(30, 32, 3, stride=1)
-        self.conv4 = _conv_relu_lrn(32, 32, 3, stride=1)
+        self.conv3 = _conv_relu_bn(30, 32, 3, stride=1)
+        self.conv4 = _conv_relu_bn(32, 32, 3, stride=1)
         self.pool2 = nn.MaxPool2d(3, stride=2, padding=1)   # max-pool, stride 2   64 -> 32
-        self.conv5 = _conv_relu_lrn(32, 32, 3, stride=1)
-        self.conv6 = _conv_relu_lrn(32, 32, 3, stride=1)
+        self.conv5 = _conv_relu_bn(32, 32, 3, stride=1)
+        self.conv6 = _conv_relu_bn(32, 32, 3, stride=1)
         self.pool3 = nn.MaxPool2d(3, stride=2, padding=1)   # 32 -> 16
-        self.conv7 = _conv_relu_lrn(32, 24, 3, stride=1)
-        self.conv8 = _conv_relu_lrn(24, 20, 3, stride=1)
+        self.conv7 = _conv_relu_bn(32, 24, 3, stride=1)
+        self.conv8 = _conv_relu_bn(24, 20, 3, stride=1)
         self.pool4 = nn.MaxPool2d(3, stride=2, padding=1)   # 16 -> 8
-        self.conv9 = _conv_relu_lrn(20, 16, 3, stride=1)
+        self.conv9 = _conv_relu_bn(20, 16, 3, stride=1)
         self.pool5 = nn.AdaptiveMaxPool2d((5, 5))           # -> exactly 5x5x16 = 400-D, per paper
 
     def forward(self, x):

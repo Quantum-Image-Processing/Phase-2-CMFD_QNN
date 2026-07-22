@@ -1,0 +1,387 @@
+import os
+import argparse
+import numpy as np
+from PIL import Image
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, random_split
+from dataset import SyntheticCMFDataset
+from model_busternet import BusterNet, build_busternet_full
+from model_utils import masked_bce_loss
+
+# Helper function for masked cross-entropy loss using logits
+def masked_cross_entropy_loss(logits, target, mask):
+    """
+    logits: [B, C, H, W] raw logits
+    target: [B, H, W] long tensor with class indices
+    mask:   [B, 1, H, W] or [B, H, W] float mask with 1 for valid pixels, 0 for ignored
+    """
+    # Compute per-pixel cross entropy loss without reduction
+    loss = F.cross_entropy(logits, target, reduction='none')  # [B, H, W]
+    # Ensure mask has same shape as loss
+    if mask.dim() == 4:
+        mask = mask.squeeze(1)  # [B, H, W]
+    loss = loss * mask
+    # Avoid division by zero
+    mask_sum = mask.sum()
+    if mask_sum.item() == 0:
+        return loss.sum() * 0.0
+    return loss.sum() / mask_sum
+
+class BusterNetWithAux(nn.Module):
+    """
+    BusterNet wrapper that also returns auxiliary predictions from each branch and logits.
+    """
+    def __init__(self, target_size=256):
+        super().__init__()
+        self.busternet = build_busternet_full(target_size=target_size)
+        # We need access to the branches for aux outputs
+        self.simidet = self.busternet.simidet
+        self.manidet = self.busternet.manidet
+        self.preprocess_layer = self.busternet.preprocess_layer
+        self.fusion = self.busternet.fusion
+        self.pred = self.busternet.pred
+        self.target_size = self.busternet.target_size
+
+    def preprocess(self, x):
+        return self.preprocess_layer(x)
+
+    def forward(self, x):
+        # Save original size
+        orig_h, orig_w = x.shape[2], x.shape[3]
+        # Preprocess
+        x = self.preprocess(x)
+        # Extract features from both branches
+        simi_out = self.simidet(x)
+        mani_out = self.manidet(x)
+        simi_feat = simi_out['d']   # [B, 6, target_size, target_size]
+        mani_feat = mani_out['d']   # [B, 6, target_size, target_size]
+        # Auxiliary predictions
+        simi_m_pred = simi_out['m_pred']  # [B, 1, target_size, target_size]
+        mani_m_pred = mani_out['m_pred']  # [B, 1, target_size, target_size]
+        # Concatenate features: 6 + 6 = 12 channels
+        fused = torch.cat([simi_feat, mani_feat], dim=1)
+        # Fusion BN-Inception: 12 -> 9 channels
+        fused = self.fusion(fused)
+        # Prediction: 9 -> 3 channels (logits)
+        pred_logits = self.pred(fused)
+        # Softmax to get probabilities
+        pred_prob = torch.softmax(pred_logits, dim=1)
+        # Resize back to original resolution
+        if orig_h != self.target_size or orig_w != self.target_size:
+            pred_prob = F.interpolate(
+                pred_prob,
+                size=(orig_h, orig_w),
+                mode='bilinear',
+                align_corners=True
+            )
+            # Also resize auxiliary predictions and logits to original size for loss computation
+            simi_m_pred = F.interpolate(
+                simi_m_pred,
+                size=(orig_h, orig_w),
+                mode='bilinear',
+                align_corners=True
+            )
+            mani_m_pred = F.interpolate(
+                mani_m_pred,
+                size=(orig_h, orig_w),
+                mode='bilinear',
+                align_corners=True
+            )
+            pred_logits = F.interpolate(
+                pred_logits,
+                size=(orig_h, orig_w),
+                mode='bilinear',
+                align_corners=True
+            )
+        return {
+            'mc_pred': pred_prob,          # [B, 3, H, W] softmax probabilities
+            'simi_m_pred': simi_m_pred,    # [B, 1, H, W] sigmoid probabilities
+            'mani_m_pred': mani_m_pred,    # [B, 1, H, W] sigmoid probabilities
+            'mc_logits': pred_logits,      # [B, 3, H, W] raw logits
+            'simi_feat': simi_feat,
+            'mani_feat': mani_feat
+        }
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train BusterNet on synthetic dataset')
+    parser.add_argument('--experiment', type=str, choices=['A', 'B'], required=True,
+                        help='Experiment A: fine-tune pretrained BusterNet; Experiment B: stage-wise training from scratch')
+    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--batch-size', type=int, default=4, help='Batch size')
+    parser.add_argument('--val-split', type=float, default=0.1, help='Fraction of data for validation')
+    parser.add_argument('--train-manifest', type=str, default=None, help='Path to training manifest CSV')
+    parser.add_argument('--val-manifest', type=str, default=None, help='Path to validation manifest CSV')
+    parser.add_argument('--save-dir', type=str, default='outputs/busternet_exp', help='Directory to save checkpoints and predictions')
+    parser.add_argument('--save-freq', type=int, default=5, help='Save checkpoint every N epochs')
+    parser.add_argument('--pretrained-path', type=str, default='busternet_converted.pth',
+                        help='Path to pretrained BusterNet .pth weights (for experiment A)')
+    parser.add_argument('--stage1-epochs', type=int, default=10, help='Number of epochs for stage 1 (exp B)')
+    parser.add_argument('--stage2-epochs', type=int, default=10, help='Number of epochs for stage 2 (exp B)')
+    parser.add_argument('--stage3-epochs', type=int, default=10, help='Number of epochs for stage 3 (exp B)')
+    parser.add_argument('--aux-weight', type=float, default=0.5, help='Weight for auxiliary loss in combined loss')
+    return parser.parse_args()
+
+def save_prediction(pred_tensor, image_tensor, mask_tensor, epoch, idx, prefix=''):
+    # Save inputs and predictions for visual verification
+    out_dir = os.path.join(args.save_dir, f'{prefix}epoch_{epoch}')
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # pred_tensor: [3, H, W] softmax probabilities -> convert to class indices
+    pred_class = torch.argmax(pred_tensor, dim=0).cpu().numpy().astype(np.uint8)
+    # Map class indices to grayscale values for visualization (0->0, 1->127, 2->255)
+    pred_vis = np.vectorize({0:0, 1:127, 2:255}.get)(pred_class)
+    gt_mask = mask_tensor.squeeze().cpu().numpy().astype(np.uint8)
+    # For mc mask, we need to map to 0,127,255 if it's multi-class
+    if gt_mask.max() > 1:  # multi-class
+        gt_vis = np.vectorize({0:0, 1:127, 2:255}.get)(gt_mask)
+    else:
+        gt_vis = gt_mask * 255
+    img = (image_tensor.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # [0,1] RGB
+    
+    Image.fromarray(img).save(os.path.join(out_dir, f'sample_{idx}_img.png'))
+    Image.fromarray(gt_vis).save(os.path.join(out_dir, f'sample_{idx}_gt.png'))
+    Image.fromarray(pred_vis).save(os.path.join(out_dir, f'sample_{idx}_pred.png'))
+
+def main():
+    global args
+    args = parse_args()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
+    
+    # Create save directory
+    os.makedirs(args.save_dir, exist_ok=True)
+    
+    # Dataset
+    print('Loading dataset...')
+    if args.train_manifest is not None and args.val_manifest is not None:
+        train_dataset = SyntheticCMFDataset(
+            manifest_csv=args.train_manifest,
+            root='coco_subset',
+            img_size=256
+        )
+        val_dataset = SyntheticCMFDataset(
+            manifest_csv=args.val_manifest,
+            root='coco_subset',
+            img_size=256
+        )
+        train_size = len(train_dataset)
+        val_size = len(val_dataset)
+    else:
+        full_dataset = SyntheticCMFDataset(
+            manifest_csv='coco_subset/forgery_manifest_with_masks.csv',
+            root='coco_subset',
+            img_size=256
+        )
+        # Split into train and validation
+        val_size = int(len(full_dataset) * args.val_split)
+        train_size = len(full_dataset) - val_size
+        train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    print(f'Train size: {train_size}, Val size: {val_size}')
+    
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    
+    # Model
+    print('Building model...')
+    if args.experiment == 'A':
+        # Experiment A
+        model = BusterNetWithAux().to(device)
+        # Load pretrained weights
+        if os.path.exists(args.pretrained_path):
+            print(f'Loading pretrained weights from {args.pretrained_path}')
+            state_dict = torch.load(args.pretrained_path, map_location=device)
+            # The state_dict is for BusterNet (without our wrapper). We need to map keys to our model.
+            # Our model has the same submodules: busternet.simidet, busternet.maniget, busternet.fusion, busternet.pred
+            # plus the preprocessing layer.
+            # We'll try to load the state_dict into the busternet submodule.
+            # First, check if the state_dict keys match the busternet submodule.
+            busternet_state_dict = model.busternet.state_dict()
+            # Filter state_dict to only keys that are in busternet_state_dict and have matching shape
+            filtered_state_dict = {}
+            for k, v in state_dict.items():
+                if k in busternet_state_dict and busternet_state_dict[k].shape == v.shape:
+                    filtered_state_dict[k] = v
+                else:
+                    # Optionally, try to map with prefix? The state_dict might be exactly for busternet.
+                    pass
+            print(f'Loaded {len(filtered_state_dict)} matching parameters out of {len(state_dict)}')
+            model.busternet.load_state_dict(filtered_state_dict, strict=False)
+            print('Loaded pretrained weights into busternet submodule.')
+        else:
+            print(f'Pretrained weights not found at {args.pretrained_path}. Starting from scratch.')
+    else:
+        # Experiment B: start from scratch
+        model = BusterNetWithAux().to(device)
+        print('Starting from random initialization.')
+    
+    # Loss weights for auxiliary loss (can be adjusted)
+    aux_weight = args.aux_weight
+    
+    # Optimizer
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+    
+    # Training loop with optional stages for experiment B
+    print(f'Starting training for experiment {args.experiment}...')
+    best_val_loss = float('inf')
+    
+    for epoch in range(args.epochs):
+        # Determine current stage for experiment B
+        if args.experiment == 'B':
+            if epoch < args.stage1_epochs:
+                stage = 1
+                # Stage 1: train only auxiliary branches (backbones and decoders, but not fusion/pred)
+                # Freeze fusion and prediction layers
+                for name, param in model.named_parameters():
+                    if 'fusion' in name or 'pred' in name:
+                        param.requires_grad = False
+                    else:
+                        param.requires_grad = True
+            elif epoch < args.stage1_epochs + args.stage2_epochs:
+                stage = 2
+                # Stage 2: freeze branches, train fusion and prediction
+                for name, param in model.named_parameters():
+                    if 'simidet' in name or 'manidet' in name:
+                        param.requires_grad = False
+                    else:
+                        param.requires_grad = True
+            else:
+                stage = 3
+                # Stage 3: fine-tune everything
+                for param in model.parameters():
+                    param.requires_grad = True
+            # Update optimizer with current trainable parameters
+            optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+        else:
+            # Experiment A: fine-tune all layers (maybe with lower lr, but we already set lr)
+            stage = 'fine-tune'
+        
+        model.train()
+        epoch_loss = 0.0
+        epoch_main_loss = 0.0
+        epoch_aux_loss = 0.0
+        
+        for i, batch in enumerate(train_loader):
+            images = batch['image'].to(device)
+            mc_masks = batch['mc'].to(device).squeeze(1).long()  # [B, H, W]
+            mm_masks = batch['mm'].to(device).float()           # [B, 1, H, W]
+            loss_masks = batch['loss_mask'].to(device).float()  # [B, 1, H, W]
+            
+            optimizer.zero_grad()
+            
+            outputs = model(images)
+            pred_logits = outputs['mc_logits']               # [B, 3, H, W] raw logits
+            simi_m_pred = outputs['simi_m_pred']             # [B, 1, H, W]
+            mani_m_pred = outputs['mani_m_pred']             # [B, 1, H, W]
+            
+            # Main loss: cross entropy between logits and mc mask
+            main_loss = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
+            
+            # Auxiliary losses: binary cross entropy with masking
+            aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
+            aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+            aux_loss = (aux_loss_simi + aux_loss_mani) / 2.0
+            
+            # Total loss
+            loss = main_loss + aux_weight * aux_loss
+            
+            loss.backward()
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+            epoch_main_loss += main_loss.item()
+            epoch_aux_loss += aux_loss.item()
+            
+            # Save predictions periodically
+            if (epoch + 1) % args.save_freq == 0 and i == 0:
+                for b_idx in range(images.shape[0]):
+                    save_prediction(
+                        outputs['mc_pred'][b_idx],
+                        images[b_idx],
+                        batch['mc'][b_idx],
+                        epoch + 1,
+                        b_idx,
+                        prefix='train_'
+                    )
+                    # Also save auxiliary predictions for debugging
+                    save_prediction(
+                        outputs['simi_m_pred'][b_idx],
+                        images[b_idx],
+                        batch['mm'][b_idx],
+                        epoch + 1,
+                        b_idx,
+                        prefix='train_simi_aux_'
+                    )
+                    save_prediction(
+                        outputs['mani_m_pred'][b_idx],
+                        images[b_idx],
+                        batch['mm'][b_idx],
+                        epoch + 1,
+                        b_idx,
+                        prefix='train_mani_aux_'
+                    )
+        
+        avg_loss = epoch_loss / len(train_loader)
+        avg_main_loss = epoch_main_loss / len(train_loader)
+        avg_aux_loss = epoch_aux_loss / len(train_loader)
+        
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch in val_loader:
+                images = batch['image'].to(device)
+                mc_masks = batch['mc'].to(device).squeeze(1).long()
+                mm_masks = batch['mm'].to(device).float()
+                loss_masks = batch['loss_mask'].to(device).float()
+                
+                outputs = model(images)
+                pred_logits = outputs['mc_logits']
+                simi_m_pred = outputs['simi_m_pred']
+                mani_m_pred = outputs['mani_m_pred']
+                
+                # Same loss computation as training
+                main_loss = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
+                aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
+                aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                aux_loss = (aux_loss_simi + aux_loss_mani) / 2.0
+                
+                loss = main_loss + aux_weight * aux_loss
+                val_loss += loss.item()
+        
+        avg_val_loss = val_loss / len(val_loader)
+        
+        print(f'Epoch [{epoch+1}/{args.epochs}] Stage {stage} - '
+              f'Train Loss: {avg_loss:.4f} (main: {avg_main_loss:.4f}, aux: {avg_aux_loss:.4f}) '
+              f'Val Loss: {avg_loss:.4f} (main: {avg_main_loss:.4f}, aux: {avg_aux_loss:.4f}) '
+              f'Val Loss: {avg_val_loss:.4f}')
+        
+        # Save checkpoint if validation loss improved
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            checkpoint_path = os.path.join(args.save_dir, f'best_model_exp{args.experiment}.pth')
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_val_loss,
+            }, checkpoint_path)
+            print(f'  -> Saved best model to {checkpoint_path}')
+        
+        # Save periodic checkpoint
+        if (epoch + 1) % args.save_freq == 0:
+            checkpoint_path = os.path.join(args.save_dir, f'checkpoint_epoch{epoch+1}_exp{args.experiment}.pth')
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_loss,
+            }, checkpoint_path)
+    
+    print('Training complete.')
+
+if __name__ == '__main__':
+    main()
