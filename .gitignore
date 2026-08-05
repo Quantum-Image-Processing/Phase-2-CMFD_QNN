@@ -6,3 +6,6 @@ features/
 __pycache__/
 *.pyc
 *.npy
+BusterNet_Training_GPU/coco_subset/
+BusterNet_Training_GPU/outputs/
+BusterNet_Training_GPU/experiment_0_outputs/
