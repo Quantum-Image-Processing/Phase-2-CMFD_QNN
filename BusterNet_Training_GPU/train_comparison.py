@@ -170,6 +170,8 @@ def parse_args():
     parser.add_argument('--root', type=str, default='coco_subset', help='Root directory of dataset')
     parser.add_argument('--img-size', type=int, default=256, help='Image size')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--device', type=str, choices=['auto', 'cpu', 'cuda'], default='auto',
+                        help="Force CPU or GPU training; 'auto' (default) picks GPU if available, same as before")
     return parser.parse_args()
 
 def set_seed(seed):
@@ -205,7 +207,16 @@ def save_prediction(pred_tensor, image_tensor, mask_tensor, epoch, idx, prefix='
 def main():
     args = parse_args()
     set_seed(args.seed)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if args.device == 'cpu':
+        device = torch.device('cpu')
+    elif args.device == 'cuda':
+        if not torch.cuda.is_available():
+            raise RuntimeError("--device cuda was requested but torch.cuda.is_available() is False "
+                               "on this machine (no GPU, or CUDA/driver not set up). "
+                               "Use --device cpu or --device auto instead.")
+        device = torch.device('cuda')
+    else:  # 'auto' -- unchanged from original behavior
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
     
     # Create save directory
