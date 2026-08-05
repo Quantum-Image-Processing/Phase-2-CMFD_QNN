@@ -10,7 +10,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 from PIL import Image
-from preprocessing import create_loss_mask, get_letterbox_params
 
 
 class BusterNetDataset(Dataset):
@@ -46,16 +45,11 @@ class BusterNetDataset(Dataset):
         self.df = pd.read_csv(csv_path)
         print(f"Loaded {split} split: {len(self.df)} samples from {csv_path}")
         
-        # Transforms
-        self.image_transform = T.Compose([
-            T.Resize((img_size, img_size), interpolation=T.InterpolationMode.BILINEAR),
-            T.ToTensor(),  # Converts to [0, 1] float tensor
-        ])
-        
-        self.mask_transform = T.Compose([
-            T.Resize((img_size, img_size), interpolation=T.InterpolationMode.NEAREST),
-        ])
-        
+        # Image/masks are plain-resized (stretched) to img_size x img_size in
+        # __getitem__ -- no letterbox/aspect-ratio-preserving padding. Measured
+        # better accuracy this way; loss_mask is therefore all-ones (every pixel
+        # is real content, nothing to exclude).
+
         # Augmentation for training
         if self.augment:
             self.augment_transform = T.Compose([
@@ -79,9 +73,8 @@ class BusterNetDataset(Dataset):
         if not os.path.exists(forged_path):
             forged_path = os.path.join(self.data_root, 'images_forged', forged_rel)
         image_raw = Image.open(forged_path).convert('RGB')
-        left, top, nw, nh, (w0, h0) = get_letterbox_params(image_raw, self.img_size)
-        loss_mask = create_loss_mask(self.img_size, left, top, nw, nh)
-        
+        loss_mask = torch.ones((self.img_size, self.img_size), dtype=torch.float32)
+
         # Load 3-class mask (mc) - 0=authentic, 1=source, 2=target
         mc_rel = row['mc_file_name']
         mc_path = os.path.join(self.data_root, mc_rel)
@@ -96,12 +89,13 @@ class BusterNetDataset(Dataset):
             mm_path = os.path.join(self.data_root, 'masks_binary', os.path.basename(mm_rel))
         mask_binary = Image.open(mm_path)
         
-        # Apply transforms
-        image = self.image_transform(image_raw)  # [3, H, W], [0, 1]
-        
-        # Resize masks with nearest neighbor
-        mask_3class = self.mask_transform(mask_3class)
-        mask_binary = self.mask_transform(mask_binary)
+        # Plain resize (stretch to img_size x img_size, no aspect-ratio
+        # preservation / no padding).
+        image_r = image_raw.resize((self.img_size, self.img_size), Image.BILINEAR)
+        image = T.functional.to_tensor(image_r)  # [3, H, W], [0, 1]
+
+        mask_3class = mask_3class.resize((self.img_size, self.img_size), Image.NEAREST)
+        mask_binary = mask_binary.resize((self.img_size, self.img_size), Image.NEAREST)
         
         # Convert masks to numpy and map {0,127,255} -> {0,1,2}
         m3_np = np.array(mask_3class, dtype=np.int64)
@@ -117,12 +111,18 @@ class BusterNetDataset(Dataset):
         mb_mapped = (mb_np > 0).astype(np.int64)
         mask_binary = torch.from_numpy(mb_mapped)  # [H, W] in {0, 1}
         
-        # Apply augmentation (same for image and masks)
+        # Apply augmentation (same geometric transform for image, masks, AND
+        # loss_mask). loss_mask starts all-ones, but rotation can still fill
+        # rotated-out corners with 0 -- keeping it in the same combined
+        # transform means those corners get correctly excluded from loss too.
         if self.augment_transform is not None:
-            # Combine for consistent augmentation
-            combined = torch.cat([image, mask_3class.unsqueeze(0).float(), mask_binary.unsqueeze(0).float()], dim=0)
-            # Note: ColorJitter only applies only to image, geometric to all
-            # For simplicity, apply geometric to all
+            combined = torch.cat([
+                image,
+                mask_3class.unsqueeze(0).float(),
+                mask_binary.unsqueeze(0).float(),
+                loss_mask.unsqueeze(0),
+            ], dim=0)
+            # Note: ColorJitter only applies to the image; geometric ops apply to all
             if torch.rand(1) < 0.5:
                 combined = T.functional.hflip(combined)
             if torch.rand(1) < 0.5:
@@ -130,10 +130,11 @@ class BusterNetDataset(Dataset):
             if torch.rand(1) < 0.3:
                 angle = torch.randint(-15, 16, (1,)).item()
                 combined = T.functional.rotate(combined, angle, interpolation=T.InterpolationMode.NEAREST)
-            
+
             image = combined[0:3]
             mask_3class = combined[3].long()
             mask_binary = combined[4].long()
+            loss_mask = combined[5]
         
         # Prepare targets
         # Main target: 3-class (0=authentic, 1=source, 2=target)
