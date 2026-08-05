@@ -1,0 +1,40 @@
+BusterNet Experiment A/B -- Lab PC Setup
+==========================================
+
+1. Copy this entire folder onto the lab PC (anywhere, e.g. Desktop).
+
+2. Install Python packages (run once):
+     pip install -r requirements.txt
+
+3. Verify torch sees a GPU (optional, just informational):
+     python -c "import torch; print(torch.cuda.is_available())"
+
+4. Run Experiment A (fine-tune pretrained BusterNet weights):
+     python train_comparison.py --experiment A --manifest coco_subset/forgery_manifest_with_masks.csv --root coco_subset --epochs 20 --batch-size 8 --save-dir outputs/comparison
+
+5. Run Experiment B (from-scratch, 4-stage training):
+     python train_comparison.py --experiment B --manifest coco_subset/forgery_manifest_with_masks.csv --root coco_subset --epochs 20 --batch-size 8 --save-dir outputs/comparison
+
+Forcing CPU or GPU
+------------------
+Add --device cpu or --device cuda to either command above to force one or
+the other. Default (no flag, or --device auto) picks GPU automatically if
+available, otherwise falls back to CPU.
+
+  --device cpu    always runs on CPU, even if a GPU is present
+  --device cuda   forces GPU; errors immediately with a clear message if
+                  no GPU/CUDA is available on this machine, instead of
+                  silently running on CPU
+  --device auto   (default) same as before -- GPU if available, else CPU
+
+Notes
+-----
+- Experiment B needs at least 20 epochs to reach its final training stage
+  (it runs 4 stages internally: 5 epochs each for the first 3, then
+  everything else in the 4th/final stage). Fewer than 16 epochs means the
+  final stage never runs at all.
+- Checkpoints save automatically every 5 epochs, plus whenever validation
+  loss improves, into --save-dir.
+- coco_subset/ already contains everything needed (images, masks, manifest
+  CSVs) -- no separate download or generation step required.
+- busternet_converted.pth (pretrained weights) is already in this folder.
