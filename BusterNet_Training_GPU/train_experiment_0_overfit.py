@@ -4,8 +4,8 @@ Fully incorporates all 9 diagnostic requirements:
 1. Valid-pixel loss masking
 2. Conservative LR (1e-4) for pretrained weights
 3. Aux outputs tracking
-4. Masked pixel accuracy
-5. Strict success criterion (Loss < 0.02 AND Masked Acc > 99%)
+4. Per-class masked pixel recall (background/source/target, computed individually)
+5. Strict success criterion (Loss < 0.02 AND macro-average per-class recall > 99%)
 6. Class distribution logging per epoch
 7. Visual prediction saving every 20 epochs
 8. Explicit weight key assertions
@@ -22,6 +22,28 @@ from PIL import Image
 from dataset_busternet import BusterNetDataset
 from model_busternet import build_busternet_full
 from preprocessing import BusterNetPreprocess
+
+
+def mask_to_rgb(mask_np):
+    """0=background(black), 1=source(green), 2=target(red)"""
+    vis = np.zeros((*mask_np.shape, 3), dtype=np.uint8)
+    vis[mask_np == 1] = [0, 255, 0]
+    vis[mask_np == 2] = [255, 0, 0]
+    return vis
+
+
+def save_all_comparisons(save_dir, imgs, targets, preds):
+    """Save one [image | ground truth | prediction] triptych per sample, for
+    every sample in the batch (not just sample 0), so results can be checked
+    against ground truth by eye."""
+    os.makedirs(save_dir, exist_ok=True)
+    for i in range(imgs.shape[0]):
+        img_np = (imgs[i].detach().cpu().numpy().transpose(1, 2, 0) * 255).clip(0, 255).astype(np.uint8)
+        gt_np = mask_to_rgb(targets[i].detach().cpu().numpy().astype(np.uint8))
+        pred_np = mask_to_rgb(preds[i].detach().cpu().numpy().astype(np.uint8))
+        combined = np.concatenate([img_np, gt_np, pred_np], axis=1)  # [256, 768, 3]
+        Image.fromarray(combined).save(os.path.join(save_dir, f"sample_{i}.png"))
+
 
 def train_overfit():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -69,7 +91,7 @@ def train_overfit():
 
     model.train()
     print("\nStarting overfit optimization for up to 100 epochs...")
-    print("Early stopping when Loss < 0.02 AND Masked Acc > 99%")
+    print("Early stopping when Loss < 0.02 AND macro-average per-class recall > 99%")
 
     for epoch in range(1, 101):
         for batch in loader:
@@ -90,13 +112,25 @@ def train_overfit():
             loss.backward()
             optimizer.step()
 
-            # Masked accuracy calculation
+            # Per-class recall (masked): for each class, % of that class's true
+            # pixels that were correctly predicted as that class. Denominator is
+            # only that class's own pixel count, not the total image -- so a class
+            # with few pixels isn't drowned out by background.
             preds = torch.argmax(logits, dim=1)  # [B, 256, 256]
-            correct = ((preds == targets) * masks.bool()).float().sum()
-            masked_acc = (correct / torch.clamp(valid_pixels, min=1.0)) * 100.0
+            valid = masks.bool()
 
-            # Class prediction distribution (over valid pixels)
-            valid_preds = preds[masks.bool()]
+            recalls = []
+            for c in range(3):
+                class_true = (targets == c) & valid
+                class_true_count = class_true.float().sum()
+                class_correct = ((preds == c) & class_true).float().sum()
+                recalls.append((class_correct / torch.clamp(class_true_count, min=1.0)) * 100.0)
+            acc_bg, acc_src, acc_tgt = recalls
+            macro_recall = (acc_bg + acc_src + acc_tgt) / 3.0
+
+            # Class prediction distribution (over valid pixels) -- separate diagnostic:
+            # what the model predicts, not whether it's correct
+            valid_preds = preds[valid]
             total_valid = valid_preds.numel()
             c0_pct = (valid_preds == 0).float().sum() / total_valid * 100.0 if total_valid > 0 else 0.0
             c1_pct = (valid_preds == 1).float().sum() / total_valid * 100.0 if total_valid > 0 else 0.0
@@ -104,37 +138,43 @@ def train_overfit():
 
         # Epoch logging
         if epoch % 10 == 0 or epoch == 1:
-            print(f"Epoch {epoch:3d}/100 | Masked Loss: {loss.item():.6f} | Masked Acc: {masked_acc.item():.2f}% | "
+            print(f"Epoch {epoch:3d}/100 | Loss: {loss.item():.6f} | "
+                  f"Recall [BG: {acc_bg.item():.2f}%, SRC: {acc_src.item():.2f}%, TGT: {acc_tgt.item():.2f}%] | "
                   f"Pred Dist [C0(BG): {c0_pct:.1f}%, C1(SRC): {c1_pct:.1f}%, C2(TGT): {c2_pct:.1f}%]")
 
-        # Save diagnostic visualization every 20 epochs
+        # Save diagnostic visualization every 20 epochs -- all 8 samples, each as
+        # [original image | ground truth mask | predicted mask]
         if epoch % 20 == 0 or epoch == 1:
-            save_path = os.path.join(out_dir, f"epoch_{epoch:03d}_pred.png")
-            # Save first sample prediction map: 0=black, 1=green, 2=red
-            p_map = preds[0].cpu().numpy().astype(np.uint8)
-            vis = np.zeros((256, 256, 3), dtype=np.uint8)
-            vis[p_map == 1] = [0, 255, 0]   # Source = Green
-            vis[p_map == 2] = [255, 0, 0]   # Target = Red
-            Image.fromarray(vis).save(save_path)
+            save_all_comparisons(os.path.join(out_dir, f"epoch_{epoch:03d}"), imgs, targets, preds)
 
         # Early stopping
-        if loss.item() < 0.02 and masked_acc.item() > 99.0:
-            print(f"\nEarly stopping at epoch {epoch}: Loss={loss.item():.4f}, Acc={masked_acc.item():.2f}%")
+        if loss.item() < 0.02 and macro_recall.item() > 99.0:
+            print(f"\nEarly stopping at epoch {epoch}: Loss={loss.item():.4f}, "
+                  f"Recall[BG={acc_bg.item():.2f}%, SRC={acc_src.item():.2f}%, TGT={acc_tgt.item():.2f}%]")
             break
+
+    # Guaranteed final save of all 8 samples, regardless of which epoch training
+    # stopped on (early stopping may land on an epoch not divisible by 20)
+    final_dir = os.path.join(out_dir, "final")
+    save_all_comparisons(final_dir, imgs, targets, preds)
+    print(f"\nSaved final image/ground-truth/prediction comparisons for all 8 samples to {final_dir}/")
 
     print("\n=== Overfit Test Summary ===")
     final_loss = loss.item()
-    final_acc = masked_acc.item()
+    final_bg, final_src, final_tgt = acc_bg.item(), acc_src.item(), acc_tgt.item()
+    final_macro = macro_recall.item()
     print(f"Final Epoch: {epoch}/100")
-    print(f"Final Masked Loss: {final_loss:.6f}")
-    print(f"Final Masked Pixel Accuracy: {final_acc:.2f}%")
+    print(f"Final Loss: {final_loss:.6f}")
+    print(f"Final Recall -- Background: {final_bg:.2f}% | Source: {final_src:.2f}% | Target: {final_tgt:.2f}%")
+    print(f"Final Macro-Average Recall: {final_macro:.2f}%")
 
-    # Strict double success criterion: Loss < 0.02 AND Masked Acc > 99.0%
-    if final_loss < 0.02 and final_acc > 99.0:
+    # Strict double success criterion: Loss < 0.02 AND macro-average per-class recall > 99.0%
+    if final_loss < 0.02 and final_macro > 99.0:
         print("[PASS] Experiment 0 Sanity Check PASSED! Model perfectly overfit 8 images.")
         return True
     else:
-        print(f"[FAIL] Experiment 0 Sanity Check FAILED (Loss={final_loss:.4f}, Acc={final_acc:.2f}%) - investigate pipeline.")
+        print(f"[FAIL] Experiment 0 Sanity Check FAILED (Loss={final_loss:.4f}, "
+              f"Macro Recall={final_macro:.2f}%) - investigate pipeline.")
         return False
 
 if __name__ == '__main__':
