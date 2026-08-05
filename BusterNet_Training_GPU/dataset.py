@@ -5,8 +5,6 @@ import numpy as np
 import torch
 from torchvision.transforms import functional as TF
 
-from preprocessing import letterbox_resize, letterbox_resize_mask, get_letterbox_params, create_loss_mask
-
 
 class SyntheticCMFDataset(torch.utils.data.Dataset):
     """
@@ -17,8 +15,12 @@ class SyntheticCMFDataset(torch.utils.data.Dataset):
       mc: LongTensor [1, img_size, img_size] values {0,1,2}
       mm: UInt8/FloatTensor [1, img_size, img_size] values {0,1}
       simi_binary: FloatTensor [1, img_size, img_size]
-      loss_mask: FloatTensor [1, img_size, img_size] where 1.0 = valid pixel, 0.0 = padded
-      meta: dict(original_size=(W,H), pad=(left,top), nw, nh, manifest_row)
+      loss_mask: FloatTensor [1, img_size, img_size], all ones (plain resize, no padding)
+      meta: dict(original_size=(W,H), manifest_row)
+
+    Image/masks are plain-resized (stretched) to img_size x img_size, not
+    letterboxed -- measured better accuracy this way than aspect-ratio-
+    preserving resize + padding.
     """
 
     def __init__(self, manifest_csv='coco_subset/forgery_manifest_with_masks.csv', root='coco_subset', img_size=256):
@@ -122,20 +124,20 @@ class SyntheticCMFDataset(torch.utils.data.Dataset):
         mc_img = self._load_mask(mc_path, convert_mode='L')
         mm_img = self._load_mask(mm_path, convert_mode='L')
 
-        # letterbox: same scale+pad for image and both masks
-        img_lb = letterbox_resize(img, self.img_size, fill=(0, 0, 0))
-        left, top, nw, nh, original_size = get_letterbox_params(img, self.img_size)
-        mc_lb = letterbox_resize_mask(mc_img, self.img_size, fill=0)
-        mm_lb = letterbox_resize_mask(mm_img, self.img_size, fill=0)
+        # Plain resize (stretch) for image and both masks -- no letterbox/padding
+        original_size = img.size  # (W, H)
+        img_r = img.resize((self.img_size, self.img_size), Image.BILINEAR)
+        mc_r = mc_img.resize((self.img_size, self.img_size), Image.NEAREST)
+        mm_r = mm_img.resize((self.img_size, self.img_size), Image.NEAREST)
 
-        # loss mask: 1 for valid, 0 for pad
-        loss_mask = create_loss_mask(self.img_size, left, top, nw, nh)
+        # No padding -- every pixel is real content, nothing to exclude from loss
+        loss_mask = torch.ones((self.img_size, self.img_size), dtype=torch.float32)
 
         # image to tensor [C,H,W] float32 in [0,1] (NOT preprocessed for VGG - model handles that)
-        image_tensor = TF.to_tensor(img_lb).type(torch.float32)  # [0,1] RGB
+        image_tensor = TF.to_tensor(img_r).type(torch.float32)  # [0,1] RGB
 
         # mc: to integer labels {0,1,2}
-        mc_np = np.array(mc_lb, dtype=np.int64)
+        mc_np = np.array(mc_r, dtype=np.int64)
         # if mask uses palette or other values, attempt to map common patterns
         mc_unique = np.unique(mc_np)
         if set(mc_unique).issubset({0, 127, 255}):
@@ -149,7 +151,7 @@ class SyntheticCMFDataset(torch.utils.data.Dataset):
         mc_tensor = torch.from_numpy(mc_np.astype(np.int64))[None, ...]  # [1,H,W]
 
         # mm: binary {0,1}
-        mm_np = np.array(mm_lb, dtype=np.uint8)
+        mm_np = np.array(mm_r, dtype=np.uint8)
         mm_np = (mm_np > 0).astype(np.uint8)
         mm_tensor = torch.from_numpy(mm_np.astype(np.uint8))[None, ...]
 
@@ -157,9 +159,6 @@ class SyntheticCMFDataset(torch.utils.data.Dataset):
 
         meta = {
             'original_size': original_size,  # (W,H)
-            'pad': (left, top),
-            'nw': nw,
-            'nh': nh,
             'manifest_row': row,
         }
 
