@@ -198,6 +198,7 @@ def parse_args():
     parser.add_argument('--stop-patience', type=int, default=20, help='Epochs to wait after LR reduction before stopping')
     parser.add_argument('--stage', type=int, choices=[1, 2, 3, 4], help='Run specific stage only (1=ManiDet, 2=SimiDet, 3=Fusion+Pred, 4=Full fine-tune)')
     parser.add_argument('--stage-epochs', type=int, help='Epochs to run for the specified stage (default: 10/10/5/50 for stages 1/2/3/4)')
+    parser.add_argument('--stages-1to3', action='store_true', help='Run stages 1-3 sequentially and stop (skip stage 4 full fine-tune)')
     return parser.parse_args()
 
 def set_seed(seed):
@@ -329,13 +330,14 @@ def main():
                 stage1_epochs = 10
                 stage2_epochs = 10
                 stage3_epochs = 5
+                stage4_start = stage1_epochs + stage2_epochs + stage3_epochs
                 if start_epoch < stage1_epochs:
                     stage = 1
                     lr_stage = args.lr * 10
                 elif start_epoch < stage1_epochs + stage2_epochs:
                     stage = 2
                     lr_stage = args.lr * 10
-                elif start_epoch < stage1_epochs + stage2_epochs + stage3_epochs:
+                elif start_epoch < stage4_start:
                     stage = 3
                     lr_stage = args.lr * 10
                 else:
@@ -380,8 +382,18 @@ def main():
             start_epoch = epoch_start
         # Limit total epochs to run
         max_epoch = min(start_epoch + args.epochs, epoch_end)
+    elif args.experiment == 'B' and args.stages_1to3:
+        # Run stages 1-3 only, skip stage 4
+        epoch_start = 0
+        epoch_end = stage1_epochs + stage2_epochs + stage3_epochs
+        
+        # Adjust start_epoch if resuming within this range
+        if start_epoch < epoch_start:
+            start_epoch = epoch_start
+        # Limit total epochs to run
+        max_epoch = min(start_epoch + args.epochs, epoch_end)
     else:
-        # Full training
+        # Full training (includes stage 4 for experiment B)
         max_epoch = start_epoch + args.epochs
     
     for epoch in range(start_epoch, max_epoch):
@@ -397,6 +409,10 @@ def main():
                 stage = 3
                 lr_stage = args.lr * 10
             else:
+                # Only go to stage 4 if NOT running stages-1to3 mode
+                if args.stages_1to3:
+                    print('Stages 1-3 complete. Stopping as requested (--stages-1to3).')
+                    break
                 stage = 4
                 lr_stage = args.lr
             
@@ -532,7 +548,7 @@ def main():
         for i in range(3):
             val_metrics['recall'][i] /= max(val_samples, 1)
         
-        print(f'Epoch [{epoch+1}/{start_epoch + args.epochs}] Stage {stage} - '
+        print(f'Epoch [{epoch+1}/{max_epoch}] Stage {stage} - '
               f'Train Loss: {avg_loss:.4f} (main: {avg_main_loss:.4f}, aux: {avg_aux_loss:.4f}) '
               f'Val Loss: {avg_val_loss:.4f} '
               f'Val Pixel Acc: {val_metrics["pixel_acc"]:.2f}% '
