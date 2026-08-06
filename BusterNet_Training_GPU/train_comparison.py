@@ -11,6 +11,7 @@ from dataset import SyntheticCMFDataset
 from model_busternet import BusterNet, build_busternet_full
 from model_utils import masked_bce_loss
 import random
+import glob
 
 # Helper function for masked cross-entropy loss using logits
 def masked_cross_entropy_loss(logits, target, mask):
@@ -154,11 +155,31 @@ class BusterNetWithAux(nn.Module):
             'mani_feat': mani_feat
         }
 
+def find_latest_checkpoint(save_dir, experiment):
+    """Find the latest checkpoint file for resuming training."""
+    pattern = os.path.join(save_dir, f'checkpoint_epoch*_exp{experiment}.pth')
+    checkpoints = glob.glob(pattern)
+    if not checkpoints:
+        return None, 0
+    # Extract epoch numbers and find the latest
+    epochs = []
+    for ckpt in checkpoints:
+        try:
+            epoch_str = ckpt.split(f'checkpoint_epoch')[1].split(f'_exp{experiment}.pth')[0]
+            epochs.append((int(epoch_str), ckpt))
+        except (IndexError, ValueError):
+            continue
+    if not epochs:
+        return None, 0
+    epochs.sort(key=lambda x: x[0])
+    latest_epoch, latest_path = epochs[-1]
+    return latest_path, latest_epoch
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train BusterNet on synthetic dataset - comparison experiments')
     parser.add_argument('--experiment', type=str, choices=['A', 'B'], required=True,
                         help='Experiment A: fine-tune pretrained BusterNet; Experiment B: stage-wise training from scratch')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train')
+    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train (additional epochs from checkpoint)')
     parser.add_argument('--lr', type=float, default=1e-4, help='Base learning rate')
     parser.add_argument('--batch-size', type=int, default=4, help='Batch size')
     parser.add_argument('--val-split', type=float, default=0.1, help='Fraction of data for validation')
@@ -172,6 +193,11 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--device', type=str, choices=['auto', 'cpu', 'cuda'], default='auto',
                         help="Force CPU or GPU training; 'auto' (default) picks GPU if available, same as before")
+    parser.add_argument('--resume', action='store_true', help='Resume from latest checkpoint in save-dir')
+    parser.add_argument('--patience', type=int, default=10, help='Epochs to wait before LR reduction (plateau)')
+    parser.add_argument('--stop-patience', type=int, default=20, help='Epochs to wait after LR reduction before stopping')
+    parser.add_argument('--stage', type=int, choices=[1, 2, 3, 4], help='Run specific stage only (1=ManiDet, 2=SimiDet, 3=Fusion+Pred, 4=Full fine-tune)')
+    parser.add_argument('--stage-epochs', type=int, help='Epochs to run for the specified stage (default: 10/10/5/50 for stages 1/2/3/4)')
     return parser.parse_args()
 
 def set_seed(seed):
@@ -252,20 +278,11 @@ def main():
         if os.path.exists(args.pretrained_path):
             print(f'Loading pretrained weights from {args.pretrained_path}')
             state_dict = torch.load(args.pretrained_path, map_location=device)
-            # The state_dict is for BusterNet (without our wrapper). We need to map keys to our model.
-            # Our model has the same submodules: busternet.simidet, busternet.maniget, busternet.fusion, busternet.pred
-            # plus the preprocessing layer.
-            # We'll try to load the state_dict into the busternet submodule.
-            # First, check if the state_dict keys match the busternet submodule.
             busternet_state_dict = model.busternet.state_dict()
-            # Filter state_dict to only keys that are in busternet_state_dict and have matching shape
             filtered_state_dict = {}
             for k, v in state_dict.items():
                 if k in busternet_state_dict and busternet_state_dict[k].shape == v.shape:
                     filtered_state_dict[k] = v
-                else:
-                    # Optionally, try to map with prefix? The state_dict might be exactly for busternet.
-                    pass
             print(f'Loaded {len(filtered_state_dict)} matching parameters out of {len(state_dict)}')
             model.busternet.load_state_dict(filtered_state_dict, strict=False)
             print('Loaded pretrained weights into busternet submodule.')
@@ -279,59 +296,115 @@ def main():
     # Loss weights for auxiliary loss (can be adjusted)
     aux_weight = 0.5
     
-    # Optimizer (will be reinitialized per stage for experiment B)
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-    
-    # Training loop with optional stages for experiment B
-    print(f'Starting training for experiment {args.experiment}...')
+    # Resume from checkpoint if requested
+    start_epoch = 0
     best_val_loss = float('inf')
+    optimizer = None
+    stage = 1 if args.experiment == 'B' else 'fine-tune'
+    lr_stage = args.lr * 10 if args.experiment == 'B' else args.lr
+    plateau_counter = 0
+    lr_reduced = False
     
-    for epoch in range(args.epochs):
+    def create_optimizer(current_stage, current_lr):
+        if args.experiment == 'B':
+            for name, param in model.named_parameters():
+                if current_stage == 1:
+                    param.requires_grad = 'manidet' in name
+                elif current_stage == 2:
+                    param.requires_grad = 'simidet' in name
+                elif current_stage == 3:
+                    param.requires_grad = ('fusion' in name or 'pred' in name)
+                else:
+                    param.requires_grad = True
+        return optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=current_lr)
+    
+    if args.resume:
+        ckpt_path, start_epoch = find_latest_checkpoint(args.save_dir, args.experiment)
+        if ckpt_path:
+            print(f'Resuming from checkpoint: {ckpt_path} (epoch {start_epoch})')
+            checkpoint = torch.load(ckpt_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            # Determine stage from epoch
+            if args.experiment == 'B':
+                stage1_epochs = 10
+                stage2_epochs = 10
+                stage3_epochs = 5
+                if start_epoch < stage1_epochs:
+                    stage = 1
+                    lr_stage = args.lr * 10
+                elif start_epoch < stage1_epochs + stage2_epochs:
+                    stage = 2
+                    lr_stage = args.lr * 10
+                elif start_epoch < stage1_epochs + stage2_epochs + stage3_epochs:
+                    stage = 3
+                    lr_stage = args.lr * 10
+                else:
+                    stage = 4
+                    lr_stage = args.lr
+            optimizer = create_optimizer(stage, lr_stage)
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            best_val_loss = checkpoint.get('loss', float('inf'))
+            print(f'Resumed at epoch {start_epoch}, stage {stage}, best_val_loss={best_val_loss:.4f}')
+        else:
+            print('No checkpoint found, starting from scratch.')
+            optimizer = create_optimizer(stage, lr_stage)
+    else:
+        optimizer = create_optimizer(stage, lr_stage)
+    
+    print(f'Starting training for experiment {args.experiment} from epoch {start_epoch}...')
+    
+    # Stage epoch boundaries for Experiment B
+    stage1_epochs = 10
+    stage2_epochs = 10
+    stage3_epochs = 5
+    stage4_default_epochs = 50
+    prev_stage = 0
+    
+    # If running specific stage, determine epoch range
+    if args.experiment == 'B' and args.stage is not None:
+        if args.stage == 1:
+            epoch_start = 0
+            epoch_end = args.stage_epochs if args.stage_epochs else stage1_epochs
+        elif args.stage == 2:
+            epoch_start = stage1_epochs
+            epoch_end = stage1_epochs + (args.stage_epochs if args.stage_epochs else stage2_epochs)
+        elif args.stage == 3:
+            epoch_start = stage1_epochs + stage2_epochs
+            epoch_end = epoch_start + (args.stage_epochs if args.stage_epochs else stage3_epochs)
+        else:  # stage 4
+            epoch_start = stage1_epochs + stage2_epochs + stage3_epochs
+            epoch_end = epoch_start + (args.stage_epochs if args.stage_epochs else stage4_default_epochs)
+        
+        # Adjust start_epoch if resuming within this stage
+        if start_epoch < epoch_start:
+            start_epoch = epoch_start
+        # Limit total epochs to run
+        max_epoch = min(start_epoch + args.epochs, epoch_end)
+    else:
+        # Full training
+        max_epoch = start_epoch + args.epochs
+    
+    for epoch in range(start_epoch, max_epoch):
         # Determine current stage for experiment B
         if args.experiment == 'B':
-            # Define stage epochs (can be adjusted)
-            stage1_epochs = 5
-            stage2_epochs = 5
-            stage3_epochs = 5
-            stage4_epochs = max(0, args.epochs - (stage1_epochs + stage2_epochs + stage3_epochs))
             if epoch < stage1_epochs:
                 stage = 1
-                # Stage 1: train only ManiDet (binary cross entropy on manipulation mask)
-                # Freeze SimiDet, fusion, prediction
-                for name, param in model.named_parameters():
-                    if 'manidet' in name:
-                        param.requires_grad = True
-                    else:
-                        param.requires_grad = False
-                lr_stage = args.lr * 10  # higher lr for stage 1 as per paper
+                lr_stage = args.lr * 10
             elif epoch < stage1_epochs + stage2_epochs:
                 stage = 2
-                # Stage 2: train only SimiDet (binary cross entropy on similarity mask)
-                for name, param in model.named_parameters():
-                    if 'simidet' in name:
-                        param.requires_grad = True
-                    else:
-                        param.requires_grad = False
                 lr_stage = args.lr * 10
             elif epoch < stage1_epochs + stage2_epochs + stage3_epochs:
                 stage = 3
-                # Stage 3: train only Fusion (cross entropy on 3-class mask)
-                for name, param in model.named_parameters():
-                    if 'fusion' in name or 'pred' in name:
-                        param.requires_grad = True
-                    else:
-                        param.requires_grad = False
                 lr_stage = args.lr * 10
             else:
                 stage = 4
-                # Stage 4: fine-tune everything (cross entropy on 3-class mask)
-                for param in model.parameters():
-                    param.requires_grad = True
-                lr_stage = args.lr  # lower lr for fine-tuning
-            # Update optimizer with current trainable parameters and stage LR
-            optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr_stage)
+                lr_stage = args.lr
+            
+            # Recreate optimizer only when stage changes
+            if stage != prev_stage:
+                optimizer = create_optimizer(stage, lr_stage)
+                prev_stage = stage
         else:
-            # Experiment A: fine-tune all layers
             stage = 'fine-tune'
         
         model.train()
@@ -355,27 +428,19 @@ def main():
             # Compute loss based on stage
             if args.experiment == 'B':
                 if stage == 1:
-                    # Only ManiDet loss (binary cross entropy)
                     loss = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
-                    main_loss = 0.0  # not used
+                    main_loss = 0.0
                     aux_loss = loss.item()
                 elif stage == 2:
-                    # Only SimiDet loss (binary cross entropy on similarity mask)
-                    # Note: dataset provides simi_binary? Actually we have mm for manipulation.
-                    # For similarity mask we need ground truth similarity map.
-                    # The dataset returns 'simi_binary' which is (mc != 0).float()
-                    # We'll use that as target for similarity.
-                    simi_target = batch['simi_binary'].to(device).float()  # [B, 1, H, W]
+                    simi_target = batch['simi_binary'].to(device).float()
                     loss = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                     main_loss = 0.0
                     aux_loss = loss.item()
                 elif stage == 3:
-                    # Only Fusion loss (cross entropy on 3-class mask)
                     loss = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                     main_loss = loss.item()
                     aux_loss = 0.0
                 else:  # stage 4
-                    # Combined loss: main + aux
                     main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                     aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
                     aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
@@ -401,7 +466,7 @@ def main():
             epoch_aux_loss += aux_loss
             
             # Save predictions periodically
-            if (epoch + 1) % 5 == 0 and i == 0:  # every 5 epochs
+            if (epoch + 1) % 5 == 0 and i == 0:
                 for b_idx in range(images.shape[0]):
                     save_prediction(
                         outputs['mc_pred'][b_idx],
@@ -420,7 +485,7 @@ def main():
         # Validation
         model.eval()
         val_loss = 0.0
-        val_metrics = {'pixel_acc': 0.0, 'mean_iou': 0.0, 'recall': [0.0,0.0,0.0]}
+        val_metrics = {'pixel_acc': 0.0, 'mean_iou': 0.0, 'recall': [0.0, 0.0, 0.0]}
         val_samples = 0
         with torch.no_grad():
             for batch in val_loader:
@@ -435,14 +500,13 @@ def main():
                 mani_m_pred = outputs['mani_m_pred']
                 
                 # Compute validation loss (same as training loss for experiment A and stage 4 of B)
-                if args.experiment == 'B' and stage in [1,2,3]:
-                    # For stages 1-3 of experiment B, validation loss is the same as training loss for that stage
+                if args.experiment == 'B' and stage in [1, 2, 3]:
                     if stage == 1:
                         loss = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
                     elif stage == 2:
                         simi_target = batch['simi_binary'].to(device).float()
                         loss = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
-                    else: # stage 3
+                    else:  # stage 3
                         loss = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                 else:
                     # Experiment A or stage 4 of B: combined loss
@@ -468,16 +532,18 @@ def main():
         for i in range(3):
             val_metrics['recall'][i] /= max(val_samples, 1)
         
-        print(f'Epoch [{epoch+1}/{args.epochs}] Stage {stage} - '
+        print(f'Epoch [{epoch+1}/{start_epoch + args.epochs}] Stage {stage} - '
               f'Train Loss: {avg_loss:.4f} (main: {avg_main_loss:.4f}, aux: {avg_aux_loss:.4f}) '
               f'Val Loss: {avg_val_loss:.4f} '
               f'Val Pixel Acc: {val_metrics["pixel_acc"]:.2f}% '
               f'Val mIoU: {val_metrics["mean_iou"]:.2f}% '
               f'Val Recall: [{val_metrics["recall"][0]:.2f}, {val_metrics["recall"][1]:.2f}, {val_metrics["recall"][2]:.2f}]')
         
-        # Save checkpoint if validation loss improved
+        # Plateau-based LR reduction and early stopping (paper policy)
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
+            plateau_counter = 0
+            lr_reduced = False
             checkpoint_path = os.path.join(args.save_dir, f'best_model_exp{args.experiment}.pth')
             torch.save({
                 'epoch': epoch,
@@ -486,6 +552,18 @@ def main():
                 'loss': avg_val_loss,
             }, checkpoint_path)
             print(f'  -> Saved best model to {checkpoint_path}')
+        else:
+            plateau_counter += 1
+            if plateau_counter >= args.patience and not lr_reduced:
+                # Reduce LR by half
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] *= 0.5
+                print(f'  -> Validation loss plateaued for {args.patience} epochs. Reducing LR to {optimizer.param_groups[0]["lr"]:.2e}')
+                lr_reduced = True
+                plateau_counter = 0  # Reset counter after LR reduction
+            elif plateau_counter >= args.stop_patience and lr_reduced:
+                print(f'  -> Validation loss stopped improving for {args.stop_patience} epochs after LR reduction. Early stopping.')
+                break
         
         # Save periodic checkpoint
         if (epoch + 1) % 5 == 0:
