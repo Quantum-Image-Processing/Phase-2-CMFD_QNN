@@ -553,7 +553,7 @@ def main():
               f'Val Loss: {avg_val_loss:.4f} '
               f'Val Pixel Acc: {val_metrics["pixel_acc"]:.2f}% '
               f'Val mIoU: {val_metrics["mean_iou"]:.2f}% '
-              f'Val Recall: [{val_metrics["recall"][0]:.2f}, {val_metrics["recall"][1]:.2f}, {val_metrics["recall"][2]:.2f}]')
+              f'Val Recall: [BG:{val_metrics["recall"][0]:.2f}, SRC:{val_metrics["recall"][1]:.2f}, TGT:{val_metrics["recall"][2]:.2f}]')
         
         # Plateau-based LR reduction and early stopping (paper policy)
         if avg_val_loss < best_val_loss:
