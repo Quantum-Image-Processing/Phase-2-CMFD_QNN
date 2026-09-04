@@ -120,7 +120,7 @@ class ExperimentATrainDataset(Dataset):
         self.get_train = get_train
         
         # Load full dataset (same as SyntheticCMFDataset)
-        from BusterNet_Training_GPU.dataset import SyntheticCMFDataset
+        from dataset import SyntheticCMFDataset
         full_dataset = SyntheticCMFDataset(
             manifest_csv=manifest_csv,
             root=root_dir,
@@ -207,6 +207,7 @@ class BusterNetWithAux(torch.nn.Module):
 # Metrics
 # =============================================================================
 def compute_metrics(pred_logits, target_mask, loss_mask):
+    """Standard metrics for forgery images (COCO, DEFACTO, train) with all 3 classes."""
     pred_prob = torch.softmax(pred_logits, dim=1)
     pred_class = torch.argmax(pred_prob, dim=1)
     
@@ -241,6 +242,86 @@ def compute_metrics(pred_logits, target_mask, loss_mask):
     
     mean_iou = np.nanmean(ious)
     return pixel_acc, mean_iou, recalls, ious
+
+
+def compute_pristine_metrics(pred_logits, target_mask, loss_mask):
+    """
+    Metrics for pristine images where GT only has background (class 0).
+    
+    For pristine images:
+    - GT has only class 0 (background)
+    - Source (class 1) and Target (class 2) have NO ground truth pixels
+    - Standard IoU/Recall for src/tgt are undefined (denominator = 0)
+    
+    Appropriate metrics:
+    - Pixel Accuracy (background accuracy)
+    - Background IoU and Recall
+    - False Positive Rate (FPR) for source and target
+    - Specificity (True Negative Rate) for source and target
+    """
+    pred_prob = torch.softmax(pred_logits, dim=1)
+    pred_class = torch.argmax(pred_prob, dim=1)
+    
+    if loss_mask.dim() == 4:
+        valid = loss_mask.squeeze(1) > 0.5
+    else:
+        valid = loss_mask > 0.5
+    
+    pred_valid = pred_class[valid]
+    target_valid = target_mask[valid]
+    
+    # Pixel accuracy (background accuracy)
+    correct = (pred_valid == target_valid).float().sum()
+    total = valid.float().sum()
+    pixel_acc = (correct / total * 100).item() if total > 0 else 0.0
+    
+    # Background metrics (class 0)
+    bg_pred = (pred_valid == 0)
+    bg_target = (target_valid == 0)
+    bg_intersection = (bg_pred & bg_target).float().sum()
+    bg_union = (bg_pred | bg_target).float().sum()
+    bg_iou = (bg_intersection / bg_union * 100).item() if bg_union > 0 else float('nan')
+    
+    bg_tp = bg_intersection
+    bg_fn = (~bg_pred & bg_target).float().sum()
+    bg_recall = (bg_tp / (bg_tp + bg_fn) * 100).item() if (bg_tp + bg_fn) > 0 else float('nan')
+    
+    # For source (class 1) and target (class 2): GT has NO positive pixels
+    # So we compute False Positive Rate and Specificity instead
+    src_pred = (pred_valid == 1)
+    tgt_pred = (pred_valid == 2)
+    
+    # Total background pixels in GT (all valid pixels are background for pristine)
+    total_bg = bg_target.float().sum()
+    
+    # False positives for src and tgt
+    src_fp = (src_pred & bg_target).float().sum()
+    tgt_fp = (tgt_pred & bg_target).float().sum()
+    
+    # True negatives for src and tgt
+    src_tn = (~src_pred & bg_target).float().sum()
+    tgt_tn = (~tgt_pred & bg_target).float().sum()
+    
+    # False Positive Rate = FP / (FP + TN) = FP / total_bg
+    src_fpr = (src_fp / total_bg * 100).item() if total_bg > 0 else 0.0
+    tgt_fpr = (tgt_fp / total_bg * 100).item() if total_bg > 0 else 0.0
+    
+    # Specificity (True Negative Rate) = TN / (TN + FP) = TN / total_bg
+    src_specificity = (src_tn / total_bg * 100).item() if total_bg > 0 else 100.0
+    tgt_specificity = (tgt_tn / total_bg * 100).item() if total_bg > 0 else 100.0
+    
+    # Precision for src/tgt is undefined (TP = 0), but we can report it as 0 if FP > 0
+    # Or better: don't report precision for pristine
+    
+    return {
+        'pixel_acc': pixel_acc,
+        'bg_iou': bg_iou,
+        'bg_recall': bg_recall,
+        'src_fpr': src_fpr,
+        'tgt_fpr': tgt_fpr,
+        'src_specificity': src_specificity,
+        'tgt_specificity': tgt_specificity,
+    }
 
 
 def save_prediction_visual(pred_tensor, image_tensor, mc_tensor, sample_id, out_dir, prefix=''):
@@ -380,6 +461,117 @@ def run_test(model, dataloader, device, save_dir, prefix='', save_vis=True):
     return all_metrics
 
 
+def run_test_pristine(model, dataloader, device, save_dir, prefix='', save_vis=True):
+    """
+    Test function for pristine images with appropriate metrics.
+    GT only has background (class 0), so src/tgt IoU/Recall are undefined.
+    Uses FPR and Specificity for src/tgt instead.
+    """
+    model.eval()
+    
+    all_metrics = {
+        'pixel_acc': [],
+        'bg_iou': [],
+        'bg_recall': [],
+        'src_fpr': [],
+        'tgt_fpr': [],
+        'src_specificity': [],
+        'tgt_specificity': [],
+    }
+    
+    sample_results = []
+    
+    with torch.no_grad():
+        for batch in dataloader:
+            images = batch['image'].to(device)
+            mc_masks = batch['mc'].to(device).squeeze(1).long()
+            loss_masks = batch['loss_mask'].to(device).float()
+            
+            outputs = model(images)
+            pred_logits = outputs['mc_logits']
+            
+            # Compute metrics per sample
+            for i in range(images.shape[0]):
+                metrics = compute_pristine_metrics(
+                    pred_logits[i:i+1], mc_masks[i:i+1], loss_masks[i:i+1]
+                )
+                
+                # Get sample_id
+                if 'sample_id' in batch:
+                    sample_ids = batch['sample_id']
+                    sample_id = sample_ids[i] if isinstance(sample_ids, list) else sample_ids[i].item() if hasattr(sample_ids[i], 'item') else sample_ids[i]
+                elif 'meta' in batch:
+                    meta = batch['meta']
+                    if isinstance(meta, list):
+                        row = meta[i]
+                    elif isinstance(meta, dict) and 'manifest_row' in meta:
+                        row = meta['manifest_row'][i] if isinstance(meta['manifest_row'], list) else meta['manifest_row']
+                    else:
+                        row = meta[i] if isinstance(meta, list) else meta
+                    sample_id = row.get('sample_id', f'sample_{i}')
+                else:
+                    sample_id = f'sample_{i}'
+                
+                all_metrics['pixel_acc'].append(metrics['pixel_acc'])
+                all_metrics['bg_iou'].append(metrics['bg_iou'])
+                all_metrics['bg_recall'].append(metrics['bg_recall'])
+                all_metrics['src_fpr'].append(metrics['src_fpr'])
+                all_metrics['tgt_fpr'].append(metrics['tgt_fpr'])
+                all_metrics['src_specificity'].append(metrics['src_specificity'])
+                all_metrics['tgt_specificity'].append(metrics['tgt_specificity'])
+                
+                sample_results.append({
+                    'sample_id': sample_id,
+                    'pixel_acc': metrics['pixel_acc'],
+                    'bg_iou': metrics['bg_iou'],
+                    'bg_recall': metrics['bg_recall'],
+                    'src_fpr': metrics['src_fpr'],
+                    'tgt_fpr': metrics['tgt_fpr'],
+                    'src_specificity': metrics['src_specificity'],
+                    'tgt_specificity': metrics['tgt_specificity'],
+                })
+                
+                if save_vis:
+                    save_prediction_visual(
+                        outputs['mc_pred'][i].cpu(),
+                        images[i].cpu(),
+                        mc_masks[i:i+1].cpu(),
+                        sample_id,
+                        save_dir,
+                        prefix=prefix
+                    )
+    
+    # Aggregate metrics
+    print(f"\n=== {prefix} Results ({len(sample_results)} samples) ===")
+    print(f"Pixel Acc (BG Acc):  {np.mean(all_metrics['pixel_acc']):.2f}%")
+    print(f"BG IoU:              {np.nanmean(all_metrics['bg_iou']):.2f}%")
+    print(f"BG Recall:           {np.nanmean(all_metrics['bg_recall']):.2f}%")
+    print(f"SRC False Positive Rate: {np.mean(all_metrics['src_fpr']):.2f}%")
+    print(f"TGT False Positive Rate: {np.mean(all_metrics['tgt_fpr']):.2f}%")
+    print(f"SRC Specificity:     {np.mean(all_metrics['src_specificity']):.2f}%")
+    print(f"TGT Specificity:     {np.mean(all_metrics['tgt_specificity']):.2f}%")
+    
+    # Save detailed results
+    import json
+    results_path = os.path.join(save_dir, f'{prefix}results.json')
+    with open(results_path, 'w') as f:
+        json.dump({
+            'summary': {
+                'pixel_acc': np.mean(all_metrics['pixel_acc']),
+                'bg_iou': float(np.nanmean(all_metrics['bg_iou'])),
+                'bg_recall': float(np.nanmean(all_metrics['bg_recall'])),
+                'src_fpr': np.mean(all_metrics['src_fpr']),
+                'tgt_fpr': np.mean(all_metrics['tgt_fpr']),
+                'src_specificity': np.mean(all_metrics['src_specificity']),
+                'tgt_specificity': np.mean(all_metrics['tgt_specificity']),
+            },
+            'per_sample': sample_results
+        }, f, indent=2)
+    print(f"Detailed results saved to: {results_path}")
+    
+    return all_metrics
+
+
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
@@ -435,11 +627,13 @@ def main():
     print('\n' + '='*60)
     print('TEST 3: PRISTINE/Symmetrical (custom_test_dataset)')
     print('='*60)
+    print('NOTE: Using pristine-specific metrics (FPR/Specificity for src/tgt)')
+    print('      since GT only has background (class 0)')
     
     pristine_dataset = CustomTestDataset(custom_test_manifest, custom_test_root, img_size=256, category='PRISTINE_Symmetrical')
     pristine_loader = DataLoader(pristine_dataset, batch_size=4, shuffle=False, num_workers=0)
     
-    run_test(model, pristine_loader, device, output_dir, prefix='pristine50_', save_vis=True)
+    run_test_pristine(model, pristine_loader, device, output_dir, prefix='pristine50_', save_vis=True)
     
     # =========================================================================
     # Test 4: 10 training images from Experiment A train split
