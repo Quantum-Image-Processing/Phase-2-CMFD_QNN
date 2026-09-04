@@ -7,9 +7,9 @@ import numpy as np
 from PIL import Image
 
 def generate_custom_test_dataset(
-    coco_manifest_path="data/synthetic_coco/manifest.json",
-    coco_images_dir="data/synthetic_coco/images",
-    coco_masks_dir="data/synthetic_coco/masks",
+    coco_forged_dir=r"C:\ml_work\synthetic_datasets\coco_subset\images_forged",
+    coco_masks_3class_dir=r"C:\ml_work\synthetic_datasets\coco_subset\masks_3class",
+    coco_masks_binary_dir=r"C:\ml_work\synthetic_datasets\coco_subset\masks_binary",
     defacto_img_dir="data/DEFACTO/copymove_img/img",
     defacto_probe_dir="data/DEFACTO/copymove_annotations/probe_mask",
     defacto_donor_dir="data/DEFACTO/copymove_annotations/donor_mask",
@@ -33,32 +33,33 @@ def generate_custom_test_dataset(
 
     manifest_rows = []
 
-    print("--- 1. Processing COCO Subset (Binary masks available) ---")
-    coco_img_files = sorted(glob.glob(os.path.join(coco_images_dir, "*.jpg")))
+    print("--- 1. Processing COCO Subset (Synthetic copy-move forgeries) ---")
+    coco_img_files = sorted(glob.glob(os.path.join(coco_forged_dir, "*.jpg")))
     selected_coco = random.sample(coco_img_files, min(num_coco, len(coco_img_files)))
 
     for idx, img_path in enumerate(selected_coco):
         base_name = os.path.splitext(os.path.basename(img_path))[0]
-        mask_path = os.path.join(coco_masks_dir, base_name + ".png")
+        # base_name format: 000000377254_forge_1
+        mc_path = os.path.join(coco_masks_3class_dir, base_name + "_mc.png")
+        mm_path = os.path.join(coco_masks_binary_dir, base_name + "_mm.png")
 
         out_img_name = f"coco_{base_name}.jpg"
         out_mc_name = f"masks_3class/coco_{base_name}_mc.png"
         out_mm_name = f"masks_binary/coco_{base_name}_mm.png"
 
-        # Load image & resize to 256x256
+        # Load forged image & resize to 256x256
         img = Image.open(img_path).convert("RGB").resize((256, 256))
         img.save(os.path.join(img_out_dir, out_img_name))
 
-        # Load mask
-        if os.path.exists(mask_path):
-            mask = Image.open(mask_path).convert("L").resize((256, 256), Image.NEAREST)
-            mask_arr = np.array(mask)
-            mm_arr = np.where(mask_arr > 0, 255, 0).astype(np.uint8)
-            # Binary mask available for synthetic coco (no 3-class source/target split)
-            mc_arr = mm_arr.copy() 
+        # Load 3-class mask (source=127, target=255) and binary mask
+        if os.path.exists(mc_path) and os.path.exists(mm_path):
+            mc_img = Image.open(mc_path).convert("L").resize((256, 256), Image.NEAREST)
+            mm_img = Image.open(mm_path).convert("L").resize((256, 256), Image.NEAREST)
+            mc_arr = np.array(mc_img)
+            mm_arr = np.array(mm_img)
         else:
-            mm_arr = np.zeros((256, 256), dtype=np.uint8)
             mc_arr = np.zeros((256, 256), dtype=np.uint8)
+            mm_arr = np.zeros((256, 256), dtype=np.uint8)
 
         cv2.imwrite(os.path.join(out_root, out_mm_name), mm_arr)
         cv2.imwrite(os.path.join(out_root, out_mc_name), mc_arr)
