@@ -141,11 +141,11 @@ class BusterNetDataset(Dataset):
         target_main = mask_3class  # [H, W]
         
         # Auxiliary targets (for Stages 1-2): binary masks for each branch
-        # ManiDet aux: binary forged mask (source U target)
-        target_manidet = (mask_3class > 0).long()  # 1 for source or target
+        # ManiDet aux: binary forged mask (target only, per paper)
+        target_manidet = (mask_3class == 2).long()  # 1 for target only
         
-        # SimiDet aux: same binary mask (similarity detection uses source U target)
-        target_simidet = target_manidet.clone()
+        # SimiDet aux: similarity detection uses source U target
+        target_simidet = (mask_3class > 0).long()
         
         aux_targets = {
             'manidet': target_manidet,
