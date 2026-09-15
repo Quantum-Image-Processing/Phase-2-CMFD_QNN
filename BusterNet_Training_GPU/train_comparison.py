@@ -186,9 +186,10 @@ def parse_args():
     parser.add_argument('--save-dir', type=str, default='outputs/comparison', help='Directory to save checkpoints and predictions')
     parser.add_argument('--pretrained-path', type=str, default='busternet_converted.pth',
                         help='Path to pretrained BusterNet .pth weights (for experiment A)')
-    parser.add_argument('--manifest', type=str, default='coco_subset/forgery_manifest_subset_2000.csv',
-                        help='Path to manifest CSV')
-    parser.add_argument('--root', type=str, default='coco_subset', help='Root directory of dataset')
+    parser.add_argument('--train-manifest', type=str, default='../combined_dataset/train/manifest.csv', help='Path to train manifest CSV')
+    parser.add_argument('--train-root', type=str, default='../combined_dataset/train', help='Root directory of train dataset')
+    parser.add_argument('--val-manifest', type=str, default='../combined_dataset/val/manifest.csv', help='Path to val manifest CSV')
+    parser.add_argument('--val-root', type=str, default='../combined_dataset/val', help='Root directory of val dataset')
     parser.add_argument('--img-size', type=int, default=256, help='Image size')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--device', type=str, choices=['auto', 'cpu', 'cuda'], default='auto',
@@ -250,17 +251,18 @@ def main():
     os.makedirs(args.save_dir, exist_ok=True)
     
     # Dataset
-    print('Loading dataset...')
-    full_dataset = SyntheticCMFDataset(
-        manifest_csv=args.manifest,
-        root=args.root,
+    print('Loading datasets...')
+    train_dataset = SyntheticCMFDataset(
+        manifest_csv=args.train_manifest,
+        root=args.train_root,
         img_size=args.img_size
     )
-    # Split into train and validation
-    val_size = int(len(full_dataset) * args.val_split)
-    train_size = len(full_dataset) - val_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(args.seed))
-    print(f'Train size: {train_size}, Val size: {val_size}')
+    val_dataset = SyntheticCMFDataset(
+        manifest_csv=args.val_manifest,
+        root=args.val_root,
+        img_size=args.img_size
+    )
+    print(f'Train size: {len(train_dataset)}, Val size: {len(val_dataset)}')
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -431,9 +433,9 @@ def main():
         for i, batch in enumerate(train_loader):
             images = batch['image'].to(device)
             mc_masks = batch['mc'].to(device).squeeze(1).long()  # [B, H, W]
-            mm_masks = batch['mm'].to(device).float()           # [B, 1, H, W]
             loss_masks = batch['loss_mask'].to(device).float()  # [B, 1, H, W]
-            simi_target = batch['simi_binary'].to(device).float() # [B, 1, H, W]
+            simi_target = (mc_masks > 0).unsqueeze(1).float()    # [B, 1, H, W] source+target
+            mani_target = (mc_masks == 2).unsqueeze(1).float()   # [B, 1, H, W] target only
             
             optimizer.zero_grad()
             
@@ -445,11 +447,10 @@ def main():
             # Compute loss based on stage
             if args.experiment == 'B':
                 if stage == 1:
-                    loss = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                    loss = masked_bce_loss(mani_m_pred, mani_target, loss_masks)
                     main_loss = 0.0
                     aux_loss = loss.item()
                 elif stage == 2:
-                    simi_target = batch['simi_binary'].to(device).float()
                     loss = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                     main_loss = 0.0
                     aux_loss = loss.item()
@@ -460,7 +461,7 @@ def main():
                 else:  # stage 4
                     main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                     aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
-                    aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                    aux_loss_mani = masked_bce_loss(mani_m_pred, mani_target, loss_masks)
                     aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                     loss = main_loss_val + aux_weight * aux_loss_val
                     main_loss = main_loss_val.item()
@@ -469,7 +470,7 @@ def main():
                 # Experiment A: combined loss
                 main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                 aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
-                aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                aux_loss_mani = masked_bce_loss(mani_m_pred, mani_target, loss_masks)
                 aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                 loss = main_loss_val + aux_weight * aux_loss_val
                 main_loss = main_loss_val.item()
@@ -508,9 +509,9 @@ def main():
             for batch in val_loader:
                 images = batch['image'].to(device)
                 mc_masks = batch['mc'].to(device).squeeze(1).long()
-                mm_masks = batch['mm'].to(device).float()
                 loss_masks = batch['loss_mask'].to(device).float()
-                simi_target = batch['simi_binary'].to(device).float()
+                simi_target = (mc_masks > 0).unsqueeze(1).float()
+                mani_target = (mc_masks == 2).unsqueeze(1).float()
                 
                 outputs = model(images)
                 pred_logits = outputs['mc_logits']
@@ -520,9 +521,8 @@ def main():
                 # Compute validation loss (same as training loss for experiment A and stage 4 of B)
                 if args.experiment == 'B' and stage in [1, 2, 3]:
                     if stage == 1:
-                        loss = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                        loss = masked_bce_loss(mani_m_pred, mani_target, loss_masks)
                     elif stage == 2:
-                        simi_target = batch['simi_binary'].to(device).float()
                         loss = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                     else:  # stage 3
                         loss = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
@@ -530,7 +530,7 @@ def main():
                     # Experiment A or stage 4 of B: combined loss
                     main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
                     aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
-                    aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
+                    aux_loss_mani = masked_bce_loss(mani_m_pred, mani_target, loss_masks)
                     aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                     loss = main_loss_val + aux_weight * aux_loss_val
                 

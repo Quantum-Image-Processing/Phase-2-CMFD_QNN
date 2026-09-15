@@ -2,7 +2,7 @@
 
 Cache:     cache_defacto/  (patches.npy, labels.npy, image_ids.npy, manifest.json)
 Reduction: PCA(k_max=8) + MinMaxScaler[-1,1], fit on train split only
-Results:   results/defacto_heads.json
+Results:   results/defhttp://localhost:8080/visual_demo.htmlacto_heads.json
 
 Subsampling for tractability:
   SVM : 20K balanced patches (10K per class) — RBF grid search on full 270K is intractable
