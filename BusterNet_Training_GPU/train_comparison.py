@@ -433,6 +433,7 @@ def main():
             mc_masks = batch['mc'].to(device).squeeze(1).long()  # [B, H, W]
             mm_masks = batch['mm'].to(device).float()           # [B, 1, H, W]
             loss_masks = batch['loss_mask'].to(device).float()  # [B, 1, H, W]
+            simi_target = batch['simi_binary'].to(device).float() # [B, 1, H, W]
             
             optimizer.zero_grad()
             
@@ -458,7 +459,7 @@ def main():
                     aux_loss = 0.0
                 else:  # stage 4
                     main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
-                    aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
+                    aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                     aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
                     aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                     loss = main_loss_val + aux_weight * aux_loss_val
@@ -467,7 +468,7 @@ def main():
             else:
                 # Experiment A: combined loss
                 main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
-                aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
+                aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                 aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
                 aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                 loss = main_loss_val + aux_weight * aux_loss_val
@@ -509,6 +510,7 @@ def main():
                 mc_masks = batch['mc'].to(device).squeeze(1).long()
                 mm_masks = batch['mm'].to(device).float()
                 loss_masks = batch['loss_mask'].to(device).float()
+                simi_target = batch['simi_binary'].to(device).float()
                 
                 outputs = model(images)
                 pred_logits = outputs['mc_logits']
@@ -527,7 +529,7 @@ def main():
                 else:
                     # Experiment A or stage 4 of B: combined loss
                     main_loss_val = masked_cross_entropy_loss(pred_logits, mc_masks, loss_masks)
-                    aux_loss_simi = masked_bce_loss(simi_m_pred, mm_masks, loss_masks)
+                    aux_loss_simi = masked_bce_loss(simi_m_pred, simi_target, loss_masks)
                     aux_loss_mani = masked_bce_loss(mani_m_pred, mm_masks, loss_masks)
                     aux_loss_val = (aux_loss_simi + aux_loss_mani) / 2.0
                     loss = main_loss_val + aux_weight * aux_loss_val
