@@ -20,7 +20,8 @@ def masked_cross_entropy_loss(logits, target, mask):
     target: [B, H, W] long tensor with class indices
     mask:   [B, 1, H, W] or [B, H, W] float mask with 1 for valid pixels, 0 for ignored
     """
-    loss = F.cross_entropy(logits, target, reduction='none')  # [B, H, W]
+    class_weights = torch.tensor([1.0, 5.0, 5.0], device=logits.device)
+    loss = F.cross_entropy(logits, target, weight=class_weights, reduction='none')  # [B, H, W]
     if mask.dim() == 4:
         mask = mask.squeeze(1)  # [B, H, W]
     loss = loss * mask
@@ -293,7 +294,7 @@ def main():
         print('Starting from random initialization.')
     
     # Loss weights for auxiliary loss (can be adjusted)
-    aux_weight = 0.5
+    aux_weight = 1.0
     
     # Resume from checkpoint if requested
     start_epoch = 0
