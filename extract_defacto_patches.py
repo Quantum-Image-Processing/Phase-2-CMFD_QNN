@@ -76,8 +76,14 @@ def load_mask_labels(mask_path):
 
 
 def get_labels(stem):
-    probe = load_mask_labels(os.path.join(PROBE_DIR, stem + '.tif'))
-    donor = load_mask_labels(os.path.join(DONOR_DIR, stem + '.tif'))
+    probe_p = os.path.join(PROBE_DIR, stem + '.jpg')
+    if not os.path.exists(probe_p):
+        probe_p = os.path.join(PROBE_DIR, stem + '.tif')
+    donor_p = os.path.join(DONOR_DIR, stem + '.tif')
+    if not os.path.exists(donor_p):
+        donor_p = os.path.join(DONOR_DIR, stem + '.jpg')
+    probe = load_mask_labels(probe_p)
+    donor = load_mask_labels(donor_p)
     return np.clip(probe + donor, 0, 1)
 
 

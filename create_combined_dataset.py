@@ -109,8 +109,13 @@ def process_defacto(defacto_dir, base_out_dir, ratios=(0.8, 0.1, 0.1)):
     for split, split_imgs in splits.items():
         for img_path in split_imgs:
             stem = os.path.splitext(os.path.basename(img_path))[0]
-            donor_path = os.path.join(donor_dir, f"{stem}.jpg")
+            donor_path = os.path.join(donor_dir, f"{stem}.tif")
+            if not os.path.exists(donor_path):
+                donor_path = os.path.join(donor_dir, f"{stem}.jpg")
+
             probe_path = os.path.join(probe_dir, f"{stem}.jpg")
+            if not os.path.exists(probe_path):
+                probe_path = os.path.join(probe_dir, f"{stem}.tif")
             
             # Load image and resize to 256x256
             img = Image.open(img_path).convert('RGB').resize((256, 256))
@@ -125,14 +130,17 @@ def process_defacto(defacto_dir, base_out_dir, ratios=(0.8, 0.1, 0.1)):
             
             if os.path.exists(donor_path):
                 donor_img = cv2.imread(donor_path, cv2.IMREAD_GRAYSCALE)
-                donor_img = cv2.resize(donor_img, (256, 256), interpolation=cv2.INTER_NEAREST)
-                mc_mask[donor_img > 127] = 127 # 1 (donor)
+                if donor_img is not None:
+                    donor_img = cv2.resize(donor_img, (256, 256), interpolation=cv2.INTER_NEAREST)
+                    mc_mask[donor_img > 127] = 127 # 1 (donor / source)
                 
             if os.path.exists(probe_path):
                 probe_img = cv2.imread(probe_path, cv2.IMREAD_GRAYSCALE)
-                probe_img = cv2.resize(probe_img, (256, 256), interpolation=cv2.INTER_NEAREST)
-                mc_mask[probe_img > 127] = 255 # 2 (probe)
-                mm_mask[probe_img > 127] = 255 # binary mask
+                if probe_img is not None:
+                    probe_img = cv2.resize(probe_img, (256, 256), interpolation=cv2.INTER_NEAREST)
+                    mc_mask[probe_img > 127] = 255 # 2 (probe / target)
+                
+            mm_mask[mc_mask > 0] = 255 # binary mask: source + target
                 
             cv2.imwrite(os.path.join(base_out_dir, split, 'masks_3class', base_mc), mc_mask)
             cv2.imwrite(os.path.join(base_out_dir, split, 'masks_binary', base_mm), mm_mask)

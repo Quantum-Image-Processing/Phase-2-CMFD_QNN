@@ -221,11 +221,7 @@ def save_prediction(pred_tensor, image_tensor, mask_tensor, epoch, idx, prefix='
     # doesn't support int64, only uint8/int32/float32, so it must be cast back down.
     pred_vis = np.vectorize({0:0, 1:127, 2:255}.get)(pred_class).astype(np.uint8)
     gt_mask = mask_tensor.squeeze().cpu().numpy().astype(np.uint8)
-    # For mc mask, we need to map to 0,127,255 if it's multi-class
-    if gt_mask.max() > 1:  # multi-class
-        gt_vis = np.vectorize({0:0, 1:127, 2:255}.get)(gt_mask).astype(np.uint8)
-    else:
-        gt_vis = (gt_mask * 255).astype(np.uint8)
+    gt_vis = np.vectorize(lambda v: {0: 0, 1: 127, 2: 255}.get(int(v), 0))(gt_mask).astype(np.uint8)
     img = (image_tensor.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # [0,1] RGB
     
     Image.fromarray(img).save(os.path.join(out_dir, f'sample_{idx}_img.png'))
@@ -596,4 +592,4 @@ def main():
     print('Training complete.')
 
 if __name__ == '__main__':
-    main()
+    main()   

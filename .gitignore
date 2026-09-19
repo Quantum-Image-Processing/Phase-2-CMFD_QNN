@@ -11,3 +11,5 @@ BusterNet_Training_GPU/outputs/
 BusterNet_Training_GPU/experiment_0_outputs/
 custom_test_dataset/manifest_test_dataset_patched.csv
 combined_dataset/
+*.zip
+*.pth
