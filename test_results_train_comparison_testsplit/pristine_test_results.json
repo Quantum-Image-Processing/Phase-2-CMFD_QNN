@@ -1,0 +1,759 @@
+{
+  "summary": {
+    "pixel_acc": 82.70663452148438,
+    "bg_iou": 82.70663452148438,
+    "bg_recall": 82.70663452148438,
+    "src_fpr": 14.337127685546875,
+    "tgt_fpr": 2.95623779296875,
+    "src_specificity": 85.66287231445312,
+    "tgt_specificity": 97.04376220703125
+  },
+  "per_sample": [
+    {
+      "sample_id": [
+        "PRISTINE_81",
+        "PRISTINE_27",
+        "PRISTINE_88",
+        "PRISTINE_58"
+      ],
+      "pixel_acc": 86.1053466796875,
+      "bg_iou": 86.1053466796875,
+      "bg_recall": 86.1053466796875,
+      "src_fpr": 2.313232421875,
+      "tgt_fpr": 11.5814208984375,
+      "src_specificity": 97.686767578125,
+      "tgt_specificity": 88.4185791015625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_81",
+        "PRISTINE_27",
+        "PRISTINE_88",
+        "PRISTINE_58"
+      ],
+      "pixel_acc": 71.2188720703125,
+      "bg_iou": 71.2188720703125,
+      "bg_recall": 71.2188720703125,
+      "src_fpr": 25.1708984375,
+      "tgt_fpr": 3.6102294921875,
+      "src_specificity": 74.8291015625,
+      "tgt_specificity": 96.3897705078125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_81",
+        "PRISTINE_27",
+        "PRISTINE_88",
+        "PRISTINE_58"
+      ],
+      "pixel_acc": 72.3052978515625,
+      "bg_iou": 72.3052978515625,
+      "bg_recall": 72.3052978515625,
+      "src_fpr": 26.59454345703125,
+      "tgt_fpr": 1.10015869140625,
+      "src_specificity": 73.40545654296875,
+      "tgt_specificity": 98.89984130859375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_81",
+        "PRISTINE_27",
+        "PRISTINE_88",
+        "PRISTINE_58"
+      ],
+      "pixel_acc": 98.22540283203125,
+      "bg_iou": 98.22540283203125,
+      "bg_recall": 98.22540283203125,
+      "src_fpr": 1.28631591796875,
+      "tgt_fpr": 0.48828125,
+      "src_specificity": 98.71368408203125,
+      "tgt_specificity": 99.51171875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_78",
+        "PRISTINE_16",
+        "PRISTINE_53",
+        "PRISTINE_52"
+      ],
+      "pixel_acc": 81.11572265625,
+      "bg_iou": 81.11572265625,
+      "bg_recall": 81.11572265625,
+      "src_fpr": 18.82476806640625,
+      "tgt_fpr": 0.05950927734375,
+      "src_specificity": 81.17523193359375,
+      "tgt_specificity": 99.94049072265625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_78",
+        "PRISTINE_16",
+        "PRISTINE_53",
+        "PRISTINE_52"
+      ],
+      "pixel_acc": 67.76580810546875,
+      "bg_iou": 67.76580810546875,
+      "bg_recall": 67.76580810546875,
+      "src_fpr": 27.154541015625,
+      "tgt_fpr": 5.07965087890625,
+      "src_specificity": 72.845458984375,
+      "tgt_specificity": 94.92034912109375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_78",
+        "PRISTINE_16",
+        "PRISTINE_53",
+        "PRISTINE_52"
+      ],
+      "pixel_acc": 99.9298095703125,
+      "bg_iou": 99.9298095703125,
+      "bg_recall": 99.9298095703125,
+      "src_fpr": 0.0701904296875,
+      "tgt_fpr": 0.0,
+      "src_specificity": 99.9298095703125,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_78",
+        "PRISTINE_16",
+        "PRISTINE_53",
+        "PRISTINE_52"
+      ],
+      "pixel_acc": 74.04632568359375,
+      "bg_iou": 74.04632568359375,
+      "bg_recall": 74.04632568359375,
+      "src_fpr": 20.5841064453125,
+      "tgt_fpr": 5.36956787109375,
+      "src_specificity": 79.4158935546875,
+      "tgt_specificity": 94.63043212890625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_95",
+        "PRISTINE_62",
+        "PRISTINE_7",
+        "PRISTINE_38"
+      ],
+      "pixel_acc": 89.39056396484375,
+      "bg_iou": 89.39056396484375,
+      "bg_recall": 89.39056396484375,
+      "src_fpr": 10.60943603515625,
+      "tgt_fpr": 0.0,
+      "src_specificity": 89.39056396484375,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_95",
+        "PRISTINE_62",
+        "PRISTINE_7",
+        "PRISTINE_38"
+      ],
+      "pixel_acc": 99.31182861328125,
+      "bg_iou": 99.31182861328125,
+      "bg_recall": 99.31182861328125,
+      "src_fpr": 0.0,
+      "tgt_fpr": 0.68817138671875,
+      "src_specificity": 100.0,
+      "tgt_specificity": 99.31182861328125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_95",
+        "PRISTINE_62",
+        "PRISTINE_7",
+        "PRISTINE_38"
+      ],
+      "pixel_acc": 95.91064453125,
+      "bg_iou": 95.91064453125,
+      "bg_recall": 95.91064453125,
+      "src_fpr": 4.08935546875,
+      "tgt_fpr": 0.0,
+      "src_specificity": 95.91064453125,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_95",
+        "PRISTINE_62",
+        "PRISTINE_7",
+        "PRISTINE_38"
+      ],
+      "pixel_acc": 82.4859619140625,
+      "bg_iou": 82.4859619140625,
+      "bg_recall": 82.4859619140625,
+      "src_fpr": 10.85205078125,
+      "tgt_fpr": 6.6619873046875,
+      "src_specificity": 89.14794921875,
+      "tgt_specificity": 93.3380126953125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_72",
+        "PRISTINE_10",
+        "PRISTINE_21",
+        "PRISTINE_70"
+      ],
+      "pixel_acc": 97.58453369140625,
+      "bg_iou": 97.58453369140625,
+      "bg_recall": 97.58453369140625,
+      "src_fpr": 1.2939453125,
+      "tgt_fpr": 1.12152099609375,
+      "src_specificity": 98.7060546875,
+      "tgt_specificity": 98.87847900390625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_72",
+        "PRISTINE_10",
+        "PRISTINE_21",
+        "PRISTINE_70"
+      ],
+      "pixel_acc": 90.185546875,
+      "bg_iou": 90.185546875,
+      "bg_recall": 90.185546875,
+      "src_fpr": 3.51104736328125,
+      "tgt_fpr": 6.30340576171875,
+      "src_specificity": 96.48895263671875,
+      "tgt_specificity": 93.69659423828125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_72",
+        "PRISTINE_10",
+        "PRISTINE_21",
+        "PRISTINE_70"
+      ],
+      "pixel_acc": 94.52972412109375,
+      "bg_iou": 94.52972412109375,
+      "bg_recall": 94.52972412109375,
+      "src_fpr": 4.98504638671875,
+      "tgt_fpr": 0.4852294921875,
+      "src_specificity": 95.01495361328125,
+      "tgt_specificity": 99.5147705078125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_72",
+        "PRISTINE_10",
+        "PRISTINE_21",
+        "PRISTINE_70"
+      ],
+      "pixel_acc": 96.527099609375,
+      "bg_iou": 96.527099609375,
+      "bg_recall": 96.527099609375,
+      "src_fpr": 2.08740234375,
+      "tgt_fpr": 1.385498046875,
+      "src_specificity": 97.91259765625,
+      "tgt_specificity": 98.614501953125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_4",
+        "PRISTINE_83",
+        "PRISTINE_48",
+        "PRISTINE_86"
+      ],
+      "pixel_acc": 17.65289306640625,
+      "bg_iou": 17.65289306640625,
+      "bg_recall": 17.65289306640625,
+      "src_fpr": 81.59027099609375,
+      "tgt_fpr": 0.7568359375,
+      "src_specificity": 18.40972900390625,
+      "tgt_specificity": 99.2431640625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_4",
+        "PRISTINE_83",
+        "PRISTINE_48",
+        "PRISTINE_86"
+      ],
+      "pixel_acc": 48.16436767578125,
+      "bg_iou": 48.16436767578125,
+      "bg_recall": 48.16436767578125,
+      "src_fpr": 51.824951171875,
+      "tgt_fpr": 0.01068115234375,
+      "src_specificity": 48.175048828125,
+      "tgt_specificity": 99.98931884765625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_4",
+        "PRISTINE_83",
+        "PRISTINE_48",
+        "PRISTINE_86"
+      ],
+      "pixel_acc": 58.294677734375,
+      "bg_iou": 58.294677734375,
+      "bg_recall": 58.294677734375,
+      "src_fpr": 41.400146484375,
+      "tgt_fpr": 0.30517578125,
+      "src_specificity": 58.599853515625,
+      "tgt_specificity": 99.69482421875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_4",
+        "PRISTINE_83",
+        "PRISTINE_48",
+        "PRISTINE_86"
+      ],
+      "pixel_acc": 79.254150390625,
+      "bg_iou": 79.254150390625,
+      "bg_recall": 79.254150390625,
+      "src_fpr": 20.45440673828125,
+      "tgt_fpr": 0.29144287109375,
+      "src_specificity": 79.54559326171875,
+      "tgt_specificity": 99.70855712890625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_42",
+        "PRISTINE_59",
+        "PRISTINE_98",
+        "PRISTINE_61"
+      ],
+      "pixel_acc": 99.3408203125,
+      "bg_iou": 99.3408203125,
+      "bg_recall": 99.3408203125,
+      "src_fpr": 0.1007080078125,
+      "tgt_fpr": 0.5584716796875,
+      "src_specificity": 99.8992919921875,
+      "tgt_specificity": 99.4415283203125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_42",
+        "PRISTINE_59",
+        "PRISTINE_98",
+        "PRISTINE_61"
+      ],
+      "pixel_acc": 58.4869384765625,
+      "bg_iou": 58.4869384765625,
+      "bg_recall": 58.4869384765625,
+      "src_fpr": 41.5130615234375,
+      "tgt_fpr": 0.0,
+      "src_specificity": 58.4869384765625,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_42",
+        "PRISTINE_59",
+        "PRISTINE_98",
+        "PRISTINE_61"
+      ],
+      "pixel_acc": 88.555908203125,
+      "bg_iou": 88.555908203125,
+      "bg_recall": 88.555908203125,
+      "src_fpr": 6.61773681640625,
+      "tgt_fpr": 4.82635498046875,
+      "src_specificity": 93.38226318359375,
+      "tgt_specificity": 95.17364501953125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_42",
+        "PRISTINE_59",
+        "PRISTINE_98",
+        "PRISTINE_61"
+      ],
+      "pixel_acc": 67.2454833984375,
+      "bg_iou": 67.2454833984375,
+      "bg_recall": 67.2454833984375,
+      "src_fpr": 32.4951171875,
+      "tgt_fpr": 0.2593994140625,
+      "src_specificity": 67.5048828125,
+      "tgt_specificity": 99.7406005859375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_1",
+        "PRISTINE_39",
+        "PRISTINE_67",
+        "PRISTINE_29"
+      ],
+      "pixel_acc": 83.8653564453125,
+      "bg_iou": 83.8653564453125,
+      "bg_recall": 83.8653564453125,
+      "src_fpr": 8.55712890625,
+      "tgt_fpr": 7.5775146484375,
+      "src_specificity": 91.44287109375,
+      "tgt_specificity": 92.4224853515625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_1",
+        "PRISTINE_39",
+        "PRISTINE_67",
+        "PRISTINE_29"
+      ],
+      "pixel_acc": 90.3045654296875,
+      "bg_iou": 90.3045654296875,
+      "bg_recall": 90.3045654296875,
+      "src_fpr": 3.42559814453125,
+      "tgt_fpr": 6.26983642578125,
+      "src_specificity": 96.57440185546875,
+      "tgt_specificity": 93.73016357421875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_1",
+        "PRISTINE_39",
+        "PRISTINE_67",
+        "PRISTINE_29"
+      ],
+      "pixel_acc": 73.56109619140625,
+      "bg_iou": 73.56109619140625,
+      "bg_recall": 73.56109619140625,
+      "src_fpr": 26.43890380859375,
+      "tgt_fpr": 0.0,
+      "src_specificity": 73.56109619140625,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_1",
+        "PRISTINE_39",
+        "PRISTINE_67",
+        "PRISTINE_29"
+      ],
+      "pixel_acc": 77.28424072265625,
+      "bg_iou": 77.28424072265625,
+      "bg_recall": 77.28424072265625,
+      "src_fpr": 19.03076171875,
+      "tgt_fpr": 3.68499755859375,
+      "src_specificity": 80.96923828125,
+      "tgt_specificity": 96.31500244140625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_75",
+        "PRISTINE_20",
+        "PRISTINE_43",
+        "PRISTINE_73"
+      ],
+      "pixel_acc": 98.1109619140625,
+      "bg_iou": 98.1109619140625,
+      "bg_recall": 98.1109619140625,
+      "src_fpr": 1.8890380859375,
+      "tgt_fpr": 0.0,
+      "src_specificity": 98.1109619140625,
+      "tgt_specificity": 100.0
+    },
+    {
+      "sample_id": [
+        "PRISTINE_75",
+        "PRISTINE_20",
+        "PRISTINE_43",
+        "PRISTINE_73"
+      ],
+      "pixel_acc": 84.44366455078125,
+      "bg_iou": 84.44366455078125,
+      "bg_recall": 84.44366455078125,
+      "src_fpr": 14.7216796875,
+      "tgt_fpr": 0.83465576171875,
+      "src_specificity": 85.2783203125,
+      "tgt_specificity": 99.16534423828125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_75",
+        "PRISTINE_20",
+        "PRISTINE_43",
+        "PRISTINE_73"
+      ],
+      "pixel_acc": 95.8740234375,
+      "bg_iou": 95.8740234375,
+      "bg_recall": 95.8740234375,
+      "src_fpr": 3.851318359375,
+      "tgt_fpr": 0.274658203125,
+      "src_specificity": 96.148681640625,
+      "tgt_specificity": 99.725341796875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_75",
+        "PRISTINE_20",
+        "PRISTINE_43",
+        "PRISTINE_73"
+      ],
+      "pixel_acc": 99.4049072265625,
+      "bg_iou": 99.4049072265625,
+      "bg_recall": 99.4049072265625,
+      "src_fpr": 0.2899169921875,
+      "tgt_fpr": 0.30517578125,
+      "src_specificity": 99.7100830078125,
+      "tgt_specificity": 99.69482421875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_31",
+        "PRISTINE_26",
+        "PRISTINE_51",
+        "PRISTINE_79"
+      ],
+      "pixel_acc": 79.28466796875,
+      "bg_iou": 79.28466796875,
+      "bg_recall": 79.28466796875,
+      "src_fpr": 20.47119140625,
+      "tgt_fpr": 0.244140625,
+      "src_specificity": 79.52880859375,
+      "tgt_specificity": 99.755859375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_31",
+        "PRISTINE_26",
+        "PRISTINE_51",
+        "PRISTINE_79"
+      ],
+      "pixel_acc": 91.52679443359375,
+      "bg_iou": 91.52679443359375,
+      "bg_recall": 91.52679443359375,
+      "src_fpr": 8.39691162109375,
+      "tgt_fpr": 0.0762939453125,
+      "src_specificity": 91.60308837890625,
+      "tgt_specificity": 99.9237060546875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_31",
+        "PRISTINE_26",
+        "PRISTINE_51",
+        "PRISTINE_79"
+      ],
+      "pixel_acc": 76.36566162109375,
+      "bg_iou": 76.36566162109375,
+      "bg_recall": 76.36566162109375,
+      "src_fpr": 22.81646728515625,
+      "tgt_fpr": 0.81787109375,
+      "src_specificity": 77.18353271484375,
+      "tgt_specificity": 99.18212890625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_31",
+        "PRISTINE_26",
+        "PRISTINE_51",
+        "PRISTINE_79"
+      ],
+      "pixel_acc": 88.69476318359375,
+      "bg_iou": 88.69476318359375,
+      "bg_recall": 88.69476318359375,
+      "src_fpr": 9.28192138671875,
+      "tgt_fpr": 2.0233154296875,
+      "src_specificity": 90.71807861328125,
+      "tgt_specificity": 97.9766845703125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_77",
+        "PRISTINE_71",
+        "PRISTINE_85",
+        "PRISTINE_37"
+      ],
+      "pixel_acc": 83.97674560546875,
+      "bg_iou": 83.97674560546875,
+      "bg_recall": 83.97674560546875,
+      "src_fpr": 3.25469970703125,
+      "tgt_fpr": 12.7685546875,
+      "src_specificity": 96.74530029296875,
+      "tgt_specificity": 87.2314453125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_77",
+        "PRISTINE_71",
+        "PRISTINE_85",
+        "PRISTINE_37"
+      ],
+      "pixel_acc": 87.66632080078125,
+      "bg_iou": 87.66632080078125,
+      "bg_recall": 87.66632080078125,
+      "src_fpr": 9.24072265625,
+      "tgt_fpr": 3.09295654296875,
+      "src_specificity": 90.75927734375,
+      "tgt_specificity": 96.90704345703125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_77",
+        "PRISTINE_71",
+        "PRISTINE_85",
+        "PRISTINE_37"
+      ],
+      "pixel_acc": 73.5443115234375,
+      "bg_iou": 73.5443115234375,
+      "bg_recall": 73.5443115234375,
+      "src_fpr": 25.018310546875,
+      "tgt_fpr": 1.4373779296875,
+      "src_specificity": 74.981689453125,
+      "tgt_specificity": 98.5626220703125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_77",
+        "PRISTINE_71",
+        "PRISTINE_85",
+        "PRISTINE_37"
+      ],
+      "pixel_acc": 99.96337890625,
+      "bg_iou": 99.96337890625,
+      "bg_recall": 99.96337890625,
+      "src_fpr": 0.0,
+      "tgt_fpr": 0.03662109375,
+      "src_specificity": 100.0,
+      "tgt_specificity": 99.96337890625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_87",
+        "PRISTINE_15",
+        "PRISTINE_3",
+        "PRISTINE_6"
+      ],
+      "pixel_acc": 82.867431640625,
+      "bg_iou": 82.867431640625,
+      "bg_recall": 82.867431640625,
+      "src_fpr": 16.8975830078125,
+      "tgt_fpr": 0.2349853515625,
+      "src_specificity": 83.1024169921875,
+      "tgt_specificity": 99.7650146484375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_87",
+        "PRISTINE_15",
+        "PRISTINE_3",
+        "PRISTINE_6"
+      ],
+      "pixel_acc": 90.37933349609375,
+      "bg_iou": 90.37933349609375,
+      "bg_recall": 90.37933349609375,
+      "src_fpr": 2.7099609375,
+      "tgt_fpr": 6.91070556640625,
+      "src_specificity": 97.2900390625,
+      "tgt_specificity": 93.08929443359375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_87",
+        "PRISTINE_15",
+        "PRISTINE_3",
+        "PRISTINE_6"
+      ],
+      "pixel_acc": 88.97552490234375,
+      "bg_iou": 88.97552490234375,
+      "bg_recall": 88.97552490234375,
+      "src_fpr": 7.22198486328125,
+      "tgt_fpr": 3.802490234375,
+      "src_specificity": 92.77801513671875,
+      "tgt_specificity": 96.197509765625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_87",
+        "PRISTINE_15",
+        "PRISTINE_3",
+        "PRISTINE_6"
+      ],
+      "pixel_acc": 82.5408935546875,
+      "bg_iou": 82.5408935546875,
+      "bg_recall": 82.5408935546875,
+      "src_fpr": 6.396484375,
+      "tgt_fpr": 11.0626220703125,
+      "src_specificity": 93.603515625,
+      "tgt_specificity": 88.9373779296875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_57",
+        "PRISTINE_55",
+        "PRISTINE_69",
+        "PRISTINE_22"
+      ],
+      "pixel_acc": 99.2462158203125,
+      "bg_iou": 99.2462158203125,
+      "bg_recall": 99.2462158203125,
+      "src_fpr": 0.0,
+      "tgt_fpr": 0.7537841796875,
+      "src_specificity": 100.0,
+      "tgt_specificity": 99.2462158203125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_57",
+        "PRISTINE_55",
+        "PRISTINE_69",
+        "PRISTINE_22"
+      ],
+      "pixel_acc": 97.24578857421875,
+      "bg_iou": 97.24578857421875,
+      "bg_recall": 97.24578857421875,
+      "src_fpr": 2.4658203125,
+      "tgt_fpr": 0.28839111328125,
+      "src_specificity": 97.5341796875,
+      "tgt_specificity": 99.71160888671875
+    },
+    {
+      "sample_id": [
+        "PRISTINE_57",
+        "PRISTINE_55",
+        "PRISTINE_69",
+        "PRISTINE_22"
+      ],
+      "pixel_acc": 76.51519775390625,
+      "bg_iou": 76.51519775390625,
+      "bg_recall": 76.51519775390625,
+      "src_fpr": 17.47283935546875,
+      "tgt_fpr": 6.011962890625,
+      "src_specificity": 82.52716064453125,
+      "tgt_specificity": 93.988037109375
+    },
+    {
+      "sample_id": [
+        "PRISTINE_57",
+        "PRISTINE_55",
+        "PRISTINE_69",
+        "PRISTINE_22"
+      ],
+      "pixel_acc": 75.653076171875,
+      "bg_iou": 75.653076171875,
+      "bg_recall": 75.653076171875,
+      "src_fpr": 16.29791259765625,
+      "tgt_fpr": 8.04901123046875,
+      "src_specificity": 83.70208740234375,
+      "tgt_specificity": 91.95098876953125
+    },
+    {
+      "sample_id": [
+        "PRISTINE_11",
+        "PRISTINE_56"
+      ],
+      "pixel_acc": 49.786376953125,
+      "bg_iou": 49.786376953125,
+      "bg_recall": 49.786376953125,
+      "src_fpr": 29.90264892578125,
+      "tgt_fpr": 20.31097412109375,
+      "src_specificity": 70.09735107421875,
+      "tgt_specificity": 79.68902587890625
+    },
+    {
+      "sample_id": [
+        "PRISTINE_11",
+        "PRISTINE_56"
+      ],
+      "pixel_acc": 94.61669921875,
+      "bg_iou": 94.61669921875,
+      "bg_recall": 94.61669921875,
+      "src_fpr": 5.38330078125,
+      "tgt_fpr": 0.0,
+      "src_specificity": 94.61669921875,
+      "tgt_specificity": 100.0
+    }
+  ]
+}

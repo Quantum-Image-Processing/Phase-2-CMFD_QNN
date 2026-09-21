@@ -1,0 +1,355 @@
+{
+  "summary": {
+    "pixel_acc": 91.220703125,
+    "mean_iou": 41.37636135816574,
+    "recall_bg": 97.99374046325684,
+    "recall_src": 28.834377562999727,
+    "recall_tgt": 32.02627468109131,
+    "manipulation_recall": 37.602618885040286,
+    "iou_bg": 91.55180702209472,
+    "iou_src": 13.186298906803131,
+    "iou_tgt": 19.390978145599366
+  },
+  "per_sample": [
+    {
+      "sample_id": [
+        "defacto_0_000000167854",
+        "defacto_0_000000097218",
+        "defacto_1_000000558448",
+        "defacto_0_000000430351"
+      ],
+      "pixel_acc": 97.63031005859375,
+      "mean_iou": 73.69246673583984,
+      "recall_bg": 97.58638763427734,
+      "recall_src": 99.45255279541016,
+      "recall_tgt": 98.1897201538086,
+      "manipulation_recall": 98.74848937988281,
+      "iou_bg": 97.53843688964844,
+      "iou_src": 51.487953186035156,
+      "iou_tgt": 72.05101013183594
+    },
+    {
+      "sample_id": [
+        "defacto_0_000000167854",
+        "defacto_0_000000097218",
+        "defacto_1_000000558448",
+        "defacto_0_000000430351"
+      ],
+      "pixel_acc": 99.37896728515625,
+      "mean_iou": 33.126322428385414,
+      "recall_bg": 100.0,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 99.37896728515625,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_0_000000167854",
+        "defacto_0_000000097218",
+        "defacto_1_000000558448",
+        "defacto_0_000000430351"
+      ],
+      "pixel_acc": 98.53515625,
+      "mean_iou": 51.911563555399574,
+      "recall_bg": 99.2965316772461,
+      "recall_src": 5.326876640319824,
+      "recall_tgt": 84.06593322753906,
+      "manipulation_recall": 58.720420837402344,
+      "iou_bg": 98.57552337646484,
+      "iou_src": 4.761904716491699,
+      "iou_tgt": 52.39726257324219
+    },
+    {
+      "sample_id": [
+        "defacto_0_000000167854",
+        "defacto_0_000000097218",
+        "defacto_1_000000558448",
+        "defacto_0_000000430351"
+      ],
+      "pixel_acc": 97.39837646484375,
+      "mean_iou": 44.94106634457906,
+      "recall_bg": 97.77240753173828,
+      "recall_src": 23.655914306640625,
+      "recall_tgt": 66.85879516601562,
+      "manipulation_recall": 63.97748565673828,
+      "iou_bg": 97.48446655273438,
+      "iou_src": 3.221083402633667,
+      "iou_tgt": 34.11764907836914
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000539008",
+        "defacto_0_000000176031",
+        "defacto_0_000000226583",
+        "defacto_0_000000210710"
+      ],
+      "pixel_acc": 92.54302978515625,
+      "mean_iou": 50.79822508494059,
+      "recall_bg": 92.51702880859375,
+      "recall_src": 99.57746124267578,
+      "recall_tgt": 88.45208740234375,
+      "manipulation_recall": 93.83202362060547,
+      "iou_bg": 92.3813705444336,
+      "iou_src": 14.985163688659668,
+      "iou_tgt": 45.028141021728516
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000539008",
+        "defacto_0_000000176031",
+        "defacto_0_000000226583",
+        "defacto_0_000000210710"
+      ],
+      "pixel_acc": 98.94256591796875,
+      "mean_iou": 72.26068496704102,
+      "recall_bg": 99.64478302001953,
+      "recall_src": 97.99777221679688,
+      "recall_tgt": 55.71992492675781,
+      "manipulation_recall": 91.21797943115234,
+      "iou_bg": 99.38236236572266,
+      "iou_src": 62.704627990722656,
+      "iou_tgt": 54.695064544677734
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000539008",
+        "defacto_0_000000176031",
+        "defacto_0_000000226583",
+        "defacto_0_000000210710"
+      ],
+      "pixel_acc": 97.09930419921875,
+      "mean_iou": 55.52096048990885,
+      "recall_bg": 98.1314697265625,
+      "recall_src": 67.10963439941406,
+      "recall_tgt": 58.499996185302734,
+      "manipulation_recall": 85.02365112304688,
+      "iou_bg": 97.69392395019531,
+      "iou_src": 39.24870300292969,
+      "iou_tgt": 29.620254516601562
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000539008",
+        "defacto_0_000000176031",
+        "defacto_0_000000226583",
+        "defacto_0_000000210710"
+      ],
+      "pixel_acc": 92.37823486328125,
+      "mean_iou": 37.81520016988119,
+      "recall_bg": 94.66484069824219,
+      "recall_src": 90.74073791503906,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 91.46067810058594,
+      "iou_bg": 94.32276153564453,
+      "iou_src": 19.122838973999023,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000244349",
+        "defacto_4_000000327181",
+        "defacto_0_000000563067",
+        "defacto_5_000000030205"
+      ],
+      "pixel_acc": 95.70159912109375,
+      "mean_iou": 31.900533040364582,
+      "recall_bg": 95.82149505615234,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 95.70159912109375,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000244349",
+        "defacto_4_000000327181",
+        "defacto_0_000000563067",
+        "defacto_5_000000030205"
+      ],
+      "pixel_acc": 93.7591552734375,
+      "mean_iou": 31.2530517578125,
+      "recall_bg": 94.88703918457031,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 93.7591552734375,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000244349",
+        "defacto_4_000000327181",
+        "defacto_0_000000563067",
+        "defacto_5_000000030205"
+      ],
+      "pixel_acc": 99.3072509765625,
+      "mean_iou": 33.1024169921875,
+      "recall_bg": 99.79299926757812,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 99.3072509765625,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000244349",
+        "defacto_4_000000327181",
+        "defacto_0_000000563067",
+        "defacto_5_000000030205"
+      ],
+      "pixel_acc": 98.89068603515625,
+      "mean_iou": 40.88130442301432,
+      "recall_bg": 99.52876281738281,
+      "recall_src": 0.0,
+      "recall_tgt": 41.95804214477539,
+      "manipulation_recall": 48.08652114868164,
+      "iou_bg": 99.05282592773438,
+      "iou_src": 0.0,
+      "iou_tgt": 23.591087341308594
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000506045",
+        "defacto_7_000000418811",
+        "defacto_11_000000429706",
+        "defacto_2_000000265915"
+      ],
+      "pixel_acc": 98.21624755859375,
+      "mean_iou": 73.19573084513347,
+      "recall_bg": 98.64924621582031,
+      "recall_src": 89.70037841796875,
+      "recall_tgt": 83.52090454101562,
+      "manipulation_recall": 93.29584503173828,
+      "iou_bg": 98.40798950195312,
+      "iou_src": 65.25885772705078,
+      "iou_tgt": 55.920345306396484
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000506045",
+        "defacto_7_000000418811",
+        "defacto_11_000000429706",
+        "defacto_2_000000265915"
+      ],
+      "pixel_acc": 99.72686767578125,
+      "mean_iou": 33.242289225260414,
+      "recall_bg": 100.0,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 99.72686767578125,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000506045",
+        "defacto_7_000000418811",
+        "defacto_11_000000429706",
+        "defacto_2_000000265915"
+      ],
+      "pixel_acc": 97.52960205078125,
+      "mean_iou": 32.509867350260414,
+      "recall_bg": 99.2700424194336,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 97.52960205078125,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_2_000000506045",
+        "defacto_7_000000418811",
+        "defacto_11_000000429706",
+        "defacto_2_000000265915"
+      ],
+      "pixel_acc": 2.93426513671875,
+      "mean_iou": 0.97808837890625,
+      "recall_bg": 100.0,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 2.93426513671875,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000178742",
+        "defacto_3_000000199962",
+        "defacto_0_000000195886",
+        "defacto_4_000000397569"
+      ],
+      "pixel_acc": 95.90911865234375,
+      "mean_iou": 31.969706217447918,
+      "recall_bg": 96.06008911132812,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 95.90911865234375,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000178742",
+        "defacto_3_000000199962",
+        "defacto_0_000000195886",
+        "defacto_4_000000397569"
+      ],
+      "pixel_acc": 99.6826171875,
+      "mean_iou": 33.2275390625,
+      "recall_bg": 100.0,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 99.6826171875,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000178742",
+        "defacto_3_000000199962",
+        "defacto_0_000000195886",
+        "defacto_4_000000397569"
+      ],
+      "pixel_acc": 70.05767822265625,
+      "mean_iou": 32.26920016606649,
+      "recall_bg": 96.53814697265625,
+      "recall_src": 3.12622332572937,
+      "recall_tgt": 63.26008987426758,
+      "manipulation_recall": 27.68928337097168,
+      "iou_bg": 73.47400665283203,
+      "iou_src": 2.934845447540283,
+      "iou_tgt": 20.39874839782715
+    },
+    {
+      "sample_id": [
+        "defacto_3_000000178742",
+        "defacto_3_000000199962",
+        "defacto_0_000000195886",
+        "defacto_4_000000397569"
+      ],
+      "pixel_acc": 98.79302978515625,
+      "mean_iou": 32.931009928385414,
+      "recall_bg": 99.71353912353516,
+      "recall_src": 0.0,
+      "recall_tgt": 0.0,
+      "manipulation_recall": 0.0,
+      "iou_bg": 98.79302978515625,
+      "iou_src": 0.0,
+      "iou_tgt": 0.0
+    }
+  ]
+}

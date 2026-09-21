@@ -1,11 +1,15 @@
 """
-Test script for Experiment A checkpoint on:
-1. 50 COCO synthetic copy-move forgeries from custom_test_dataset
-2. 10 training images from Experiment A train split (seed=42, val_split=0.1)
+Test script for Experiment A checkpoint on combined_dataset test split:
+1. COCO synthetic copy-move forgeries
+2. DEFACTO copy-move forgeries
+3. PRISTINE/Symmetrical images
+4. coverage_sgo images
 
-Uses checkpoint: C:/Users/dines/Downloads/best_model_expA.pth
+Uses checkpoint: C:/Users/dines/OneDrive/Desktop/Phase-1-QNN/BusterNet_Training_GPU/checkpoint_epoch20_expA.pth
 Architecture: BusterNet from BusterNet_Training_GPU
 """
+
+print("SCRIPT STARTING")  # DEBUG
 
 import os
 import csv
@@ -25,6 +29,7 @@ from model_busternet import BusterNet, build_busternet_full
 from model_simidet import build_simidet
 from model_manidet import build_manidet
 from preprocessing import BusterNetPreprocess
+from dataset import SyntheticCMFDataset
 
 
 # =============================================================================
@@ -324,6 +329,205 @@ def compute_pristine_metrics(pred_logits, target_mask, loss_mask):
     }
 
 
+def compute_manipulation_recall(pred_logits, target_mask, loss_mask):
+    """
+    Manipulation recall for DEFACTO: Rm = TPm / (TPm + FNm)
+    
+    TPm = pixels correctly predicted as either source (1) or target (2)
+    FNm = pixels that are source or target in GT but predicted as background (0)
+    
+    This measures: of all manipulated pixels (src + tgt), how many were detected?
+    """
+    pred_prob = torch.softmax(pred_logits, dim=1)
+    pred_class = torch.argmax(pred_prob, dim=1)
+    
+    if loss_mask.dim() == 4:
+        valid = loss_mask.squeeze(1) > 0.5
+    else:
+        valid = loss_mask > 0.5
+    
+    pred_valid = pred_class[valid]
+    target_valid = target_mask[valid]
+    
+    # Manipulated pixels in GT: source (1) OR target (2)
+    manipulated_gt = (target_valid == 1) | (target_valid == 2)
+    
+    # Predicted as manipulated: source (1) OR target (2)
+    manipulated_pred = (pred_valid == 1) | (pred_valid == 2)
+    
+    # TPm: correctly detected manipulated pixels
+    tp_m = (manipulated_pred & manipulated_gt).float().sum()
+    
+    # FNm: manipulated in GT but predicted as background
+    fn_m = (~manipulated_pred & manipulated_gt).float().sum()
+    
+    if (tp_m + fn_m).item() == 0:
+        return float('nan')
+    
+    return (tp_m / (tp_m + fn_m) * 100).item()
+
+
+def compute_manipulation_recall(pred_logits, target_mask, loss_mask):
+    """
+    Manipulation recall for DEFACTO: Rm = TPm / (TPm + FNm)
+    
+    TPm = pixels correctly predicted as either source (1) or target (2)
+    FNm = pixels that are source or target in GT but predicted as background (0)
+    
+    This measures: of all manipulated pixels (src + tgt), how many were detected?
+    """
+    pred_prob = torch.softmax(pred_logits, dim=1)
+    pred_class = torch.argmax(pred_prob, dim=1)
+    
+    if loss_mask.dim() == 4:
+        valid = loss_mask.squeeze(1) > 0.5
+    else:
+        valid = loss_mask > 0.5
+    
+    pred_valid = pred_class[valid]
+    target_valid = target_mask[valid]
+    
+    # Manipulated pixels in GT: source (1) OR target (2)
+    manipulated_gt = (target_valid == 1) | (target_valid == 2)
+    
+    # Predicted as manipulated: source (1) OR target (2)
+    manipulated_pred = (pred_valid == 1) | (pred_valid == 2)
+    
+    # TPm: correctly detected manipulated pixels
+    tp_m = (manipulated_pred & manipulated_gt).float().sum()
+    
+    # FNm: manipulated in GT but predicted as background
+    fn_m = (~manipulated_pred & manipulated_gt).float().sum()
+    
+    if (tp_m + fn_m).item() == 0:
+        return float('nan')
+    
+    return (tp_m / (tp_m + fn_m) * 100).item()
+
+
+# =============================================================================
+# Test function for DEFACTO with manipulation recall
+# =============================================================================
+def run_test_defacto(model, dataloader, device, save_dir, prefix='', save_vis=True):
+    """Test on DEFACTO - per-class recall + manipulation recall Rm."""
+    model.eval()
+    
+    all_metrics = {
+        'pixel_acc': [],
+        'mean_iou': [],
+        'recall_bg': [],
+        'recall_src': [],
+        'recall_tgt': [],
+        'manipulation_recall': [],  # Rm = TPm / (TPm + FNm)
+        'iou_bg': [],
+        'iou_src': [],
+        'iou_tgt': [],
+    }
+    
+    sample_results = []
+    
+    with torch.no_grad():
+        for batch in dataloader:
+            images = batch['image'].to(device)
+            mc_masks = batch['mc'].to(device).squeeze(1).long()
+            loss_masks = batch['loss_mask'].to(device).float()
+            
+            outputs = model(images)
+            pred_logits = outputs['mc_logits']
+            
+            for i in range(images.shape[0]):
+                pixel_acc, mean_iou, recalls, ious = compute_metrics(
+                    pred_logits[i:i+1], mc_masks[i:i+1], loss_masks[i:i+1]
+                )
+                
+                # Manipulation recall
+                r_m = compute_manipulation_recall(
+                    pred_logits[i:i+1], mc_masks[i:i+1], loss_masks[i:i+1]
+                )
+                
+                # Get sample_id (different datasets return it differently)
+                if 'sample_id' in batch:
+                    sample_ids = batch['sample_id']
+                    sample_id = sample_ids[i] if isinstance(sample_ids, list) else sample_ids[i].item() if hasattr(sample_ids[i], 'item') else sample_ids[i]
+                elif 'meta' in batch:
+                    meta = batch['meta']
+                    if isinstance(meta, list):
+                        row = meta[i]
+                    elif isinstance(meta, dict) and 'manifest_row' in meta:
+                        row = meta['manifest_row'][i] if isinstance(meta['manifest_row'], list) else meta['manifest_row']
+                    else:
+                        row = meta[i] if isinstance(meta, list) else meta
+                    sample_id = row.get('sample_id', f'sample_{i}')
+                else:
+                    sample_id = f'sample_{i}'
+                
+                all_metrics['pixel_acc'].append(pixel_acc)
+                all_metrics['mean_iou'].append(mean_iou)
+                all_metrics['recall_bg'].append(recalls[0])
+                all_metrics['recall_src'].append(recalls[1])
+                all_metrics['recall_tgt'].append(recalls[2])
+                all_metrics['manipulation_recall'].append(r_m)
+                all_metrics['iou_bg'].append(ious[0])
+                all_metrics['iou_src'].append(ious[1])
+                all_metrics['iou_tgt'].append(ious[2])
+                
+                sample_results.append({
+                    'sample_id': sample_id,
+                    'pixel_acc': pixel_acc,
+                    'mean_iou': mean_iou,
+                    'recall_bg': recalls[0],
+                    'recall_src': recalls[1],
+                    'recall_tgt': recalls[2],
+                    'manipulation_recall': r_m,
+                    'iou_bg': ious[0],
+                    'iou_src': ious[1],
+                    'iou_tgt': ious[2],
+                })
+                
+                if save_vis:
+                    save_prediction_visual(
+                        outputs['mc_pred'][i].cpu(),
+                        images[i].cpu(),
+                        mc_masks[i:i+1].cpu(),
+                        sample_id,
+                        save_dir,
+                        prefix=prefix
+                    )
+    
+    # Aggregate metrics
+    print(f"\n=== {prefix} Results ({len(sample_results)} samples) ===")
+    print(f"Pixel Acc:           {np.mean(all_metrics['pixel_acc']):.2f}%")
+    print(f"Mean IoU:            {np.nanmean(all_metrics['mean_iou']):.2f}%")
+    print(f"Recall BG:           {np.nanmean(all_metrics['recall_bg']):.2f}%")
+    print(f"Recall SRC:          {np.nanmean(all_metrics['recall_src']):.2f}%")
+    print(f"Recall TGT:          {np.nanmean(all_metrics['recall_tgt']):.2f}%")
+    print(f"Manipulation Recall: {np.nanmean(all_metrics['manipulation_recall']):.2f}%")
+    print(f"IoU BG:              {np.nanmean(all_metrics['iou_bg']):.2f}%")
+    print(f"IoU SRC:             {np.nanmean(all_metrics['iou_src']):.2f}%")
+    print(f"IoU TGT:             {np.nanmean(all_metrics['iou_tgt']):.2f}%")
+    
+    # Save detailed results
+    results_path = os.path.join(save_dir, f'{prefix}results.json')
+    with open(results_path, 'w') as f:
+        json.dump({
+            'summary': {
+                'pixel_acc': np.mean(all_metrics['pixel_acc']),
+                'mean_iou': np.nanmean(all_metrics['mean_iou']),
+                'recall_bg': float(np.nanmean(all_metrics['recall_bg'])),
+                'recall_src': float(np.nanmean(all_metrics['recall_src'])),
+                'recall_tgt': float(np.nanmean(all_metrics['recall_tgt'])),
+                'manipulation_recall': float(np.nanmean(all_metrics['manipulation_recall'])),
+                'iou_bg': float(np.nanmean(all_metrics['iou_bg'])),
+                'iou_src': float(np.nanmean(all_metrics['iou_src'])),
+                'iou_tgt': float(np.nanmean(all_metrics['iou_tgt'])),
+            },
+            'per_sample': sample_results
+        }, f, indent=2)
+    print(f"Detailed results saved to: {results_path}")
+    
+    return all_metrics
+
+
 def save_prediction_visual(pred_tensor, image_tensor, mc_tensor, sample_id, out_dir, prefix=''):
     """Save prediction visualization."""
     os.makedirs(out_dir, exist_ok=True)
@@ -573,87 +777,129 @@ def run_test_pristine(model, dataloader, device, save_dir, prefix='', save_vis=T
 
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f'Using device: {device}')
-    
-    # Paths
-    checkpoint_path = r'C:\Users\dines\Downloads\best_model_expA.pth'
-    custom_test_manifest = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\custom_test_dataset\manifest_test_dataset.csv'
-    custom_test_root = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\custom_test_dataset'
-    expA_manifest = r'C:\ml_work\synthetic_datasets\coco_subset\forgery_manifest_subset_2000.csv'
-    expA_root = r'C:\ml_work\synthetic_datasets\coco_subset'
-    output_dir = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\test_results_expA'
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Load model
-    print('Loading model...')
-    model = BusterNetWithAux(target_size=256).to(device)
-    
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    print(f'Checkpoint epoch: {checkpoint["epoch"]}, val_loss: {checkpoint["loss"]:.4f}')
-    
-    # Load state dict
-    model.load_state_dict(checkpoint['model_state_dict'], strict=True)
-    print('Model loaded successfully.')
+    try:
+        print("MAIN START")  # DEBUG
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(f'Using device: {device}')
+        
+        # Paths
+        checkpoint_path = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\BusterNet_Training_GPU\checkpoint_epoch20_expA.pth'
+        test_manifest = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\combined_dataset\test\manifest.csv'
+        test_root = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\combined_dataset\test'
+        output_dir = r'C:\Users\dines\OneDrive\Desktop\Phase-1-QNN\test_results_expA_combined'
+        
+        print(f"Checkpoint path: {checkpoint_path}")  # DEBUG
+        print(f"Test manifest: {test_manifest}")  # DEBUG
+        print(f"Test root: {test_root}")  # DEBUG
+        print(f"Output dir: {output_dir}")  # DEBUG
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Load model
+        print('Loading model...')
+        model = BusterNetWithAux(target_size=256).to(device)
+        
+        print(f'Checkpoint path exists: {os.path.exists(checkpoint_path)}')  # DEBUG
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        print(f'Checkpoint epoch: {checkpoint["epoch"]}, val_loss: {checkpoint["loss"]:.4f}')
+        
+        # Load state dict
+        model.load_state_dict(checkpoint['model_state_dict'], strict=True)
+        print('Model loaded successfully.')
+    except Exception as e:
+        print(f"Error in main: {e}")
+        import traceback
+        traceback.print_exc()
     
     # =========================================================================
-    # Test 1: COCO synthetic copy-move forgeries from custom_test_dataset
+    # Dataset class for combined_dataset (filter by category)
+    # =========================================================================
+    class CombinedDataset(Dataset):
+        """Wrapper around SyntheticCMFDataset with category filtering."""
+        def __init__(self, manifest_csv, root_dir, img_size=256, category=None):
+            self.base_dataset = SyntheticCMFDataset(manifest_csv, root_dir, img_size)
+            self.category = category
+            
+            if category:
+                # For non-COCO categories, match exact category name
+                candidate_indices = [
+                    i for i, row in enumerate(self.base_dataset.rows)
+                    if row.get('category') == category
+                ]
+            else:
+                # COCO subset has empty category (two consecutive commas in CSV)
+                candidate_indices = [
+                    i for i, row in enumerate(self.base_dataset.rows)
+                    if not row.get('category') or row.get('category') == ''
+                ]
+            
+            # Verify files exist
+            self.indices = []
+            for i in candidate_indices:
+                try:
+                    _ = self.base_dataset[i]
+                    self.indices.append(i)
+                except FileNotFoundError:
+                    pass  # Skip missing files
+            
+            cat_str = f" ({category})" if category else " (COCO)"
+            print(f"Loaded {len(self.indices)} valid samples from {manifest_csv}{cat_str} (skipped {len(candidate_indices) - len(self.indices)} missing)")
+        
+        def __len__(self):
+            return len(self.indices)
+        
+        def __getitem__(self, idx):
+            return self.base_dataset[self.indices[idx]]
+    
+    # =========================================================================
+    # Test 1: COCO subset (test split) - standard forgery metrics
     # =========================================================================
     print('\n' + '='*60)
-    print('TEST 1: COCO synthetic copy-move forgeries (custom_test_dataset)')
+    print('TEST 1: COCO Subset (test split)')
     print('='*60)
     
-    coco_dataset = CustomTestDataset(custom_test_manifest, custom_test_root, img_size=256, category='COCO_Subset')
+    coco_dataset = CombinedDataset(test_manifest, test_root, img_size=256, category='coco')
     coco_loader = DataLoader(coco_dataset, batch_size=4, shuffle=False, num_workers=0)
     
-    run_test(model, coco_loader, device, output_dir, prefix='coco50_', save_vis=True)
+    run_test(model, coco_loader, device, output_dir, prefix='coco_test_', save_vis=True)
     
     # =========================================================================
-    # Test 2: DEFACTO from custom_test_dataset
+    # Test 2: DEFACTO (test split) - standard forgery metrics + manipulation recall
     # =========================================================================
     print('\n' + '='*60)
-    print('TEST 2: DEFACTO copy-move forgeries (custom_test_dataset)')
+    print('TEST 2: DEFACTO (test split)')
     print('='*60)
     
-    defacto_dataset = CustomTestDataset(custom_test_manifest, custom_test_root, img_size=256, category='DEFACTO')
+    defacto_dataset = CombinedDataset(test_manifest, test_root, img_size=256, category='defacto')
     defacto_loader = DataLoader(defacto_dataset, batch_size=4, shuffle=False, num_workers=0)
     
-    run_test(model, defacto_loader, device, output_dir, prefix='defacto50_', save_vis=True)
+    run_test_defacto(model, defacto_loader, device, output_dir, prefix='defacto_test_', save_vis=True)
     
     # =========================================================================
-    # Test 3: PRISTINE/Symmetrical from custom_test_dataset
+    # Test 3: PRISTINE (test split) - FPR and Specificity for src/tgt
     # =========================================================================
     print('\n' + '='*60)
-    print('TEST 3: PRISTINE/Symmetrical (custom_test_dataset)')
+    print('TEST 3: PRISTINE (test split)')
     print('='*60)
     print('NOTE: Using pristine-specific metrics (FPR/Specificity for src/tgt)')
     print('      since GT only has background (class 0)')
     
-    pristine_dataset = CustomTestDataset(custom_test_manifest, custom_test_root, img_size=256, category='PRISTINE_Symmetrical')
+    pristine_dataset = CombinedDataset(test_manifest, test_root, img_size=256, category='PRISTINE')
     pristine_loader = DataLoader(pristine_dataset, batch_size=4, shuffle=False, num_workers=0)
     
-    run_test_pristine(model, pristine_loader, device, output_dir, prefix='pristine50_', save_vis=True)
+    run_test_pristine(model, pristine_loader, device, output_dir, prefix='pristine_test_', save_vis=True)
     
     # =========================================================================
-    # Test 4: 10 training images from Experiment A train split
+    # Test 4: coverage_sgo (test split)
     # =========================================================================
     print('\n' + '='*60)
-    print('TEST 4: 10 training images from Experiment A train split (seed=42)')
+    print('TEST 4: coverage_sgo (test split)')
     print('='*60)
     
-    # Get Experiment A train split
-    expA_train_dataset = ExperimentATrainDataset(
-        expA_manifest, expA_root, img_size=256, val_split=0.1, seed=42, get_train=True
-    )
+    coverage_dataset = CombinedDataset(test_manifest, test_root, img_size=256, category='coverage_sgo')
+    coverage_loader = DataLoader(coverage_dataset, batch_size=4, shuffle=False, num_workers=0)
     
-    # Take first 10 samples
-    subset_10 = Subset(expA_train_dataset, list(range(10)))
-    expA_loader = DataLoader(subset_10, batch_size=4, shuffle=False, num_workers=0)
-    
-    print(f"Testing on {len(subset_10)} training samples from Experiment A split")
-    
-    run_test(model, expA_loader, device, output_dir, prefix='expA_train10_', save_vis=True)
+    run_test(model, coverage_loader, device, output_dir, prefix='coverage_test_', save_vis=True)
     
     print('\n' + '='*60)
     print('ALL TESTS COMPLETE')
