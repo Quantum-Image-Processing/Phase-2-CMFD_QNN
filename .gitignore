@@ -13,3 +13,6 @@ custom_test_dataset/manifest_test_dataset_patched.csv
 combined_dataset/
 *.zip
 *.pth
+BusterNet_Training_GPU/1_presentation.tex
+BusterNet_Training_GPU/diagram_assets/demo_results_grid.png
+BusterNet_Training_GPU/research_paper.tex
